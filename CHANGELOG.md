@@ -228,6 +228,20 @@
 - 开发柱：代码编辑器面板、项目脚手架、发布流程。
 - 办公柱：xlsx / pptx。
 
+### 开源
+
+- 仓库以 **MIT** 公开：https://github.com/Denghui1835/njau-ca-dsh
+  （首个 tag `v0.1.0`，对应「工作坊外壳 + 办公柱」这一版。）
+- 开源前做的三件事，都不是形式主义：
+  1. **按仓库自己的规矩清掉个人信息** —— `HANDOVER.md` 早就写了「联系方式别写进公开仓库」，
+     所以 `packages/brand/OWNER.md` 的姓名列改成「校内渠道」，改用 GitHub noreply 邮箱提交。
+  2. **去掉写死的本机路径** —— `tests/smoke-*.mjs` 的仓库根目录改成从 `import.meta.url` 推导，
+     谁 clone 下来都能直接跑。
+  3. **让许可证可被机器识别** —— MIT 正文后面原本追加了中文说明，GitHub 的 licensee
+     因此把它识别成 "Other"；说明挪到 `NOTICE.md` 后正确识别为 MIT。
+- 新增 `scripts/check.mjs`（不装 DSH 也能跑的结构与语法自检）与
+  `.github/workflows/ci.yml`（ubuntu + windows × node 22/24 跑三套冒烟测试）。
+
 ---
 
 <!-- 下一届从这里开始追加：
