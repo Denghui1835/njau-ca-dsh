@@ -1,7 +1,7 @@
 # 南农计协 · DSH
 
 [![license: MIT](https://img.shields.io/badge/license-MIT-0B5FFF)](LICENSE)
-[![node](https://img.shields.io/badge/node-22%20%7C%2024-3C873A)](.github/workflows/ci.yml)
+![node](https://img.shields.io/badge/node-22%20%7C%2024-3C873A)
 [![runtime deps: 0](https://img.shields.io/badge/runtime%20deps-0-brightgreen)](docs/adr/0005-zero-runtime-dependencies.md)
 [![for DSH](https://img.shields.io/badge/runs%20on-DeepSeek%20Harness-4D6BFE)](https://github.com/deepseek-ai)
 
