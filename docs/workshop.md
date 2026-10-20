@@ -22,11 +22,11 @@
 │  只做：看现状（数清楚每条产线有多少东西） + 导航（把面板切过去）
 │  不做：不出图、不配音、不剪片、不编译
 ├──────────────┬──────────────────┬──────────────────┐
-│  办公柱       │   漫剧柱           │   开发柱（待建）    │
-│  packages/    │   packages/manju  │                   │
-│  office       │   剧本 ⇄ 分镜      │  文件树 + 编辑器    │
-│  ✅ docx      │   ✅ 前两步         │  + 终端 + 脚手架    │
-│               │   出图/配音/合成⬜   │                   │
+│  办公柱       │   漫剧柱           │   开发柱           │
+│  packages/    │   packages/manju  │   packages/code   │
+│  office       │   剧本 ⇄ 分镜      │   文件树 + 编辑器   │
+│  ✅ docx      │   ✅ 前两步         │   ✅ 读写 + 白名单跑 │
+│               │   出图/配音/合成⬜   │   脚手架/发布 ⬜     │
 └──────────────┴──────────────────┴──────────────────┘
                     共用：<root> = ~/.dsh/njau-ca
                     共用：identity.json（协会身份，唯一真源）
@@ -34,7 +34,7 @@
 
 **铁律复述**：产线之间不互相调用。外壳要开办公面板时走的是「导航」
 （`sidebarRight.openTab('njau-office')` / `window.__NJAU_OPEN_OFFICE__(path)`），
-漫剧同理（`openTab('njau-manju')` / `window.__NJAU_OPEN_MANJU__(name)`），
+漫剧与开发同理（`__NJAU_OPEN_MANJU__(name)` / `__NJAU_OPEN_CODE__(id)`），
 不是 `import` 人家的服务。
 
 ## 现在到哪一步了
@@ -51,14 +51,30 @@
 | 漫剧：分镜表卡片编辑（增删 / 上下移 / 台词 / 时长 / 状态 / 缺口提示） | ✅ |
 | 漫剧：脏数据修复（坏 JSON、缺字段、重复 id 都能救回） | ✅ |
 | 漫剧：出图 / 配音 / 字幕 / 合成 | ⬜ 待建（三步各自独立插件，共用一个 storyboard.json） |
-| 开发：项目列表与导航 | ✅ |
-| 开发：代码编辑器 / 一键发布 | ⬜ 待建 |
+| 开发：项目发现 + 文件树（自动跳过 node_modules 等） | ✅ |
+| 开发：代码编辑器（自带轻量高亮、行号、Tab/Ctrl+S） | ✅ |
+| 开发：文件读写（1MB 上限、二进制拒绝、baseHash 并发保护） | ✅ |
+| 开发：白名单运行（npm/pnpm/yarn scripts + 只读 git），任意命令拒绝 | ✅ |
+| 开发：项目脚手架 / 一键发布 | ⬜ 待建 |
 | 办公：xlsx / pptx | ⬜ 待建 |
+
+## 开发柱接下来怎么做（建议路线）
+
+开发柱现在还差「开工」和「上线」两头：
+
+1. **脚手架**：`site/` 下按模板建项目（静态站 / Vue / 纯 HTML 单页），
+   生成时就带好 `.gitignore`、README、部署说明 —— 下一届拿到就能改。
+2. **发布**：静态站大概率是传到学校服务器或 GitHub Pages。
+   做成「一条命令 + 一份检查清单」，并且在发之前强制检查：有没有把内部材料带上。
+3. **终端联动**：现在就靠 `openTab('terminal')` 切过去。若将来 DSH 提供
+   终端命令注入的公开 API，再把「在这里跑」做成真正的一键。
+
+**不要**把代码编辑器往 Monaco 的方向做：零运行时依赖是铁律，
+现有的两层 textarea + 高亮已经够读代码、够改代码。
 
 ## 漫剧柱接下来怎么做（建议路线）
 
 漫剧 = 剧本 → 分镜 → 出图 → 配音字幕 → 合成。前两步已经能干活，剩下三步每步一个插件：
-
 1. **出图**（`packages/manju-draw`）：每个 panel 一次生成任务，
    产物落 `assets/<panel-id>.png` 并把路径写进 `panel.asset`、状态推到 `drawn`。
    失败要留下可重试的记录，别把半成品写进 asset。
@@ -85,11 +101,12 @@
 
 ## 验收清单（改完工作坊后逐条过）
 
-- [ ] 启动日志有 `[njau-workshop] 已加载`、`[njau-office] 已加载`、`[njau-manju] 已加载`，工具数分别是 2 / 5 / 6。
+- [ ] 启动日志有 `[njau-workshop]`、`[njau-office]`、`[njau-manju]`、`[njau-code]` 四行，工具数 2 / 5 / 6 / 6。
 - [ ] `GET /njau/api/workshop/state` 返回三条产线，`identity.shortName` 是「南农计协」。
 - [ ] 会话头部出现「工作坊」按钮，点开面板能看到三张产线卡与真实数量。
 - [ ] 在办公面板新建一份文档 → 改字 → 保存 → 用 Word/WPS 打开不报错。
 - [ ] 在漫剧面板新建一个项目 → 写剧本 → 加两格分镜 → 保存 → 重开文件仍在。
-- [ ] `GET /njau/api/manju/asset` 能直出 `assets/` 里的图，且 `../` 越界被拒。
-- [ ] `node tests/smoke-workshop.mjs` 与 `node tests/smoke-manju.mjs` 全绿。
-- [ ] 漫剧视图新建项目后，磁盘上真的出现 `剧本.md` / `storyboard.json` / `assets/`。
+- [ ] 在开发面板选一个项目 → 打开 `src/*.js` → 改一行 → 保存 → 磁盘上确实变了。
+- [ ] 开发面板「运行」里跑一个 `npm run` script，输出被捕获；任意命令返回 400。
+- [ ] `node scripts/verify-live.mjs http://127.0.0.1:<port>` 全绿（三柱端到端）。
+- [ ] 四个冒烟测试全绿：`smoke-workshop` / `smoke-manju` / `smoke-code` / `smoke-deck`。

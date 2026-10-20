@@ -1,0 +1,4 @@
+# 开发柱的 bundle patch。
+- insert:
+    - id: njau-code
+      name: '@njau-ca/dsh-njau-code'

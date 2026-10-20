@@ -113,6 +113,58 @@ check(mine !== undefined, '项目出现在列表里')
 check(mine?.panels === 1, `列表显示 ${mine?.panels} 格`)
 check(mine?.drawn === 1, '已出图 1 格')
 
+console.log('\n--- 开发柱端到端（临时项目） ---')
+const codeHealth = await api('GET', '/njau/api/code/health')
+check(codeHealth.status === 200 && codeHealth.data.value?.service === 'njau-code', '开发柱 /njau/api/code/health')
+check(Array.isArray(codeHealth.data.value?.roots) && codeHealth.data.value.roots.length === 2, '两个项目根（site / learning）')
+
+const dataRoot = join(manjuBase, '..', '..')
+const codeName = `_verify-code-${Date.now().toString(36)}`
+const codeDir = join(dataRoot, 'site', codeName)
+mkdirSync(join(codeDir, 'src'), { recursive: true })
+mkdirSync(join(codeDir, 'node_modules', 'noise'), { recursive: true })
+writeFileSync(join(codeDir, 'package.json'), JSON.stringify({
+  name: codeName,
+  version: '0.0.1',
+  scripts: { echo: 'node echo.js' },
+}, null, 2), 'utf8')
+writeFileSync(join(codeDir, 'echo.js'), "console.log('verify-live ok')\n", 'utf8')
+writeFileSync(join(codeDir, 'index.html'), '<!doctype html><title>verify</title>\n', 'utf8')
+writeFileSync(join(codeDir, 'src', 'app.js'), "const a = 1\nconsole.log(a)\n", 'utf8')
+
+const codeProjects = await api('GET', '/njau/api/code/projects')
+const mineCode = codeProjects.data.value?.projects?.find((item) => item.id === `site/${codeName}`)
+check(mineCode !== undefined, `项目被发现：site/${codeName}`)
+check(mineCode?.scripts?.includes('echo') === true, `scripts 读到：${mineCode?.scripts?.join(',')}`)
+
+const codeTree = await api('GET', `/njau/api/code/tree?project=${encodeURIComponent(`site/${codeName}`)}`)
+check(codeTree.status === 200, '文件树 200')
+const treeNames = (codeTree.data.value?.nodes ?? []).map((node) => node.name)
+check(treeNames.includes('src'), '文件树里有 src')
+check(!treeNames.includes('node_modules'), 'node_modules 被跳过')
+
+const codeFile = await api('GET', `/njau/api/code/file?project=${encodeURIComponent(`site/${codeName}`)}&path=src%2Fapp.js`)
+check(codeFile.status === 200 && codeFile.data.value.language === 'javascript', '读文件 + 语言识别')
+
+const nextSource = "const a = 42\nconsole.log(a)\n"
+const codeSaved = await api('POST', '/njau/api/code/file', {
+  project: `site/${codeName}`, path: 'src/app.js', text: nextSource, baseHash: codeFile.data.value.hash,
+})
+check(codeSaved.status === 200, '保存文件 200')
+check(readFileSync(join(codeDir, 'src', 'app.js'), 'utf8') === nextSource, '磁盘内容已更新')
+
+const codeRun = await api('POST', '/njau/api/code/run', { project: `site/${codeName}`, action: 'npm:run:echo' })
+check(codeRun.status === 200, 'npm:run:echo 200')
+check(codeRun.data.value?.code === 0, `退出码 ${codeRun.data.value?.code}`)
+check(codeRun.data.value?.stdout?.includes('verify-live ok') === true, '脚本输出被捕获')
+
+const codeDenied = await api('POST', '/njau/api/code/run', { project: `site/${codeName}`, action: 'rm -rf /' })
+check(codeDenied.status === 400, '任意命令被拒（400）')
+
+const stateCode = await api('GET', '/njau/api/workshop/state')
+const codeLine = stateCode.data.value.lines.find((line) => line.id === 'code')
+check(codeLine.count >= 1, `工作坊数到了开发项目（${codeLine.count}）`)
+
 console.log('\n--- 办公柱能列目录吗 ---')
 const scan = await api('GET', '/njau/api/office/scan')
 check(scan.status === 200, '办公 scan 200')
@@ -121,9 +173,15 @@ check(typeof scan.data.value?.total === 'number', `办公文档总数 ${scan.dat
 // 清理：临时项目不给协会数据留垃圾
 try {
   rmSync(projectDir, { recursive: true, force: true })
-  check(!existsSync(projectDir), '临时项目已清理')
+  check(!existsSync(projectDir), '临时漫剧项目已清理')
 } catch (error) {
-  check(false, `临时项目清理失败：${error.message}`)
+  check(false, `临时漫剧项目清理失败：${error.message}`)
+}
+try {
+  rmSync(codeDir, { recursive: true, force: true })
+  check(!existsSync(codeDir), '临时开发项目已清理')
+} catch (error) {
+  check(false, `临时开发项目清理失败：${error.message}`)
 }
 
 console.log('')

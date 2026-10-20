@@ -198,6 +198,24 @@ window.__ModuleLoader__.load({
         }
       }, [props])
 
+      // 开发柱同理：能带项目 id 就带，带不了就只开面板。
+      const openCode = useCallback((id) => {
+        const hook = typeof window === 'undefined' ? undefined : window.__NJAU_OPEN_CODE__
+        if (typeof hook === 'function') {
+          try {
+            hook(id ?? '')
+            return
+          } catch {
+            /* 落到下面兜底 */
+          }
+        }
+        try {
+          props.openTab('njau-code')
+        } catch {
+          setError('开发面板还没装（@njau-ca/dsh-njau-code），先把它加进 profile。')
+        }
+      }, [props])
+
       const identity = data?.identity ?? {}
       const lines = data?.lines ?? []
 
@@ -312,9 +330,13 @@ window.__ModuleLoader__.load({
               ),
               h('div', { className: 'nw-count' }, h('b', null, String(project.files)), '个文件'),
             ),
+            h('div', { className: 'nw-actions' },
+              h('button', { type: 'button', className: 'nw-btn', onClick: () => openCode(project.rel) }, '打开编辑'),
+            ),
             h('div', { className: 'nw-path' }, project.rel),
           )),
         h('div', { className: 'nw-actions', style: { marginTop: 10 } },
+          h('button', { type: 'button', className: 'nw-btn nw-btn-primary', onClick: () => openCode('') }, '打开开发面板'),
           h('button', { type: 'button', className: 'nw-btn', onClick: () => openKind('files', '文件树') }, '文件树'),
           h('button', { type: 'button', className: 'nw-btn', onClick: () => openKind('terminal', '终端') }, '终端'),
         ),

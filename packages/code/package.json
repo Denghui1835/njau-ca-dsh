@@ -1,0 +1,38 @@
+{
+  "name": "@njau-ca/dsh-njau-code",
+  "version": "0.1.0",
+  "description": "计协工作坊 · 开发柱：项目列表 + 文件树 + 代码编辑器 + 白名单运行（npm/pnpm scripts、git 只读）。",
+  "type": "module",
+  "main": "lib/index.js",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "code-editor",
+    "plugin"
+  ],
+  "files": [
+    "lib/",
+    "client/",
+    "cordis.patch.yml",
+    "README.md",
+    "OWNER.md"
+  ],
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./client/client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  }
+}

@@ -261,6 +261,33 @@
   这是刻意的：外壳在漫剧柱没装时也要能起项目。两份都写同一个格式标记，
   差异由 `normalize()` 抹平 —— 兼容层才是它们不出分歧的原因。
 
+### 新增 `packages/code`（开发柱）
+
+三条产线的最后一根：**项目发现 + 文件树 + 代码编辑器 + 白名单运行**。
+
+- **不是 IDE**：终端与工作区文件树用 DSH 自带的，这里只补「看项目、改文件、跑构建」。
+- **编辑器自带**：没有 Monaco/CodeMirror —— 零运行时依赖是铁律，也没有 CDN。
+  实现是「行号栏 + `<pre>` 高亮层 + 透明文字的 `<textarea>`」两层重叠、滚动同步；
+  高亮是自己写的四类分词（注释 / 字符串 / 关键字 / 数字），覆盖 js/ts/py/json/yaml/css/shell。
+- **白名单运行**（这条是安全设计，别放宽）：
+  只跑项目 `package.json` 里**声明过**的 scripts，以及 `git status/log/diff --stat` 三个只读命令。
+  任意 shell 一律拒绝 —— 面板不是终端，一个按钮能跑任意命令就等于后门。
+  超时 60 秒整棵进程树被杀，输出截断 200KB。
+- 文件读写：1MB 上限、二进制（含 `\0`）拒绝、`baseHash` 并发保护（`file/conflict`）。
+- 路径边界：项目必须在 `site/` 或 `learning/` 之下，文件必须在项目目录内，`..` 一律拒。
+- 6 个工具 + `/njau/api/code/*`；面板点保存/跑脚本与模型调工具共用同一个 `service.js`。
+
+#### 实测验证
+
+- `tests/smoke-code.mjs` 全绿：契约 → 项目发现（含无 package.json 的静态页项目）
+  → 文件树跳过 `node_modules` → 读写/冲突/越界/二进制 → **真跑一次 `npm run build` 并捕获输出**
+  → `rm -rf /` 被拒 → 非 git 项目跑 git 被拒 → 只读 git 在真仓库上跑通 → 真 HTTP。
+- `scripts/verify-live.mjs` 扩到三柱：对运行中的实例建临时开发项目
+  → 被发现 → 文件树 → 读 → 写 → 跑 script → 越界被拒 → **最后自动删掉临时项目**。
+- **自己抓到并修掉的一个真 bug**：高亮类名写成 `nc-t-*`，CSS 里是 `nk-t-*`。
+  语法检查、接口测试、端到端全过，只有颜色不生效 —— 靠比对下发 bundle 里的字符串才发现。
+  教训写进了 `packages/code/OWNER.md`。
+
 ### 开源
 
 - 仓库以 **MIT** 公开：https://github.com/Denghui1835/njau-ca-dsh

@@ -35,7 +35,7 @@ export const LINES = [
     glyph: '码',
     desc: '协会网站、工具、脚本',
     domains: ['site', 'learning'],
-    panel: null,
+    panel: 'njau-code',
   },
 ]
 
