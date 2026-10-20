@@ -1,0 +1,44 @@
+{
+  "name": "@njau-ca/dsh-njau-office",
+  "version": "0.1.0",
+  "description": "计协工作坊 · 办公柱：自带 OOXML 引擎，直接在 DSH 里打开、编辑、保存 Word 文档，不依赖 WPS/Office。",
+  "type": "module",
+  "main": "lib/index.js",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "docx",
+    "ooxml",
+    "wps",
+    "word",
+    "plugin"
+  ],
+  "files": [
+    "lib/",
+    "client/",
+    "cordis.patch.yml",
+    "README.md",
+    "OWNER.md"
+  ],
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./client/client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "scripts": {
+    "test:docx": "node scripts/test-docx.mjs"
+  }
+}

@@ -1,0 +1,9 @@
+# 南农计协 · deck（演示文稿）
+#
+# 把本插件插进 profile 的插件树。config 可选：
+#   dataDir:      覆盖数据根（默认继承 core 的 ~/.dsh/njau-ca）
+#   templatesDir: 覆盖内置模板目录
+- insert:
+    - id: njau-ca-deck
+      name: '@njau-ca/dsh-njau-deck'
+      config: {}

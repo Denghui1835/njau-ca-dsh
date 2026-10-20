@@ -1,0 +1,16 @@
+# @njau-ca/dsh-njau-core —— 计协生态内核（bundle 层）
+#
+# 契约（dsh 0.1.5+）：bundle 的 patch 在 profile 树里插入本插件行。
+# 插件行本身很薄：真正的工具 / 技能 / 命令都在 lib/index.js 的 apply() 内注册
+# （ctx.tools.register / ctx.skills.register / ctx.commands.register）。
+#
+# 可选配置（全部有默认值，不配也能跑）：
+#   dataDir    协会数据根目录，默认 <用户主目录>/.dsh/njau-ca
+#   clubName   协会全称
+#   shortName  协会简称
+#   schoolYear 当前学年，默认按系统时间推算
+#   domain     本机这份数据属于哪个域（默认 general）
+- insert:
+    - id: njau-ca-core
+      name: '@njau-ca/dsh-njau-core'
+      config: {}

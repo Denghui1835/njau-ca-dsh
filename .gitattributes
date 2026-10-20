@@ -1,0 +1,15 @@
+# 统一换行：仓库里和检出后都是 LF，只有 Windows 脚本用 CRLF。
+# 这样跨平台跑测试不会因为 CRLF 出怪问题。
+* text=auto eol=lf
+
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制产物不要做行尾转换，也不要被当成文本 diff。
+*.docx binary
+*.xlsx binary
+*.pptx binary
+*.png binary
+*.jpg binary
+*.mp4 binary
+*.zip binary

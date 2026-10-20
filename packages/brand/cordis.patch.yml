@@ -1,0 +1,6 @@
+# @njau-ca/dsh-njau-brand —— 装进 profile 的一行。
+# 品牌靠「占 slot + 注入 style/script」实现，DSH 没有任何品牌配置面。
+- insert:
+    - id: njau-ca-brand
+      name: '@njau-ca/dsh-njau-brand'
+      config: {}

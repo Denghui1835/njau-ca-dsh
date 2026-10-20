@@ -1,0 +1,39 @@
+{
+  "name": "@njau-ca/dsh-njau-core",
+  "version": "0.1.0",
+  "description": "南农计协 DSH 生态内核：协会身份、术语约定、共享数据层与总纲技能。所有计协业务插件都遵循它定义的约定。",
+  "type": "module",
+  "main": "./lib/index.js",
+  "files": [
+    "lib",
+    "skills",
+    "cordis.patch.yml",
+    "README.md",
+    "OWNER.md"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "njau",
+    "club",
+    "ecosystem",
+    "core"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0-rc <5"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
+  }
+}

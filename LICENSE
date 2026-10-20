@@ -1,0 +1,32 @@
+MIT License
+
+Copyright (c) 2026 南京农业大学计算机爱好者协会 (NJAU Computer Enthusiasts Association)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+说明：
+
+- 本仓库是**学生社团**的技术项目，与南京农业大学校方无隶属关系，
+  不代表学校立场，也不是学校官方系统。
+- 代码以 MIT 许可开放，方便下一届接手与修改。
+- **协会的业务数据不属于本许可范围。** 数据归协会所有，单独交接，
+  见 GOVERNANCE.md 第六节。
+- 任何让外界误认为本系统是学校官方系统的使用方式，均被明确反对。

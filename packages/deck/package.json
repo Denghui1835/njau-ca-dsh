@@ -1,0 +1,15 @@
+{
+  "name": "@njau-ca/dsh-njau-deck",
+  "version": "0.1.0",
+  "private": true,
+  "description": "南农计协 · 演示文稿：计协标准演示模板 + 内容管线，让 DSH 能生成和修改 PPT（取代 WPS）",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": { "default": "./lib/index.js" },
+    "./package.json": "./package.json"
+  },
+  "files": ["lib", "skills", "templates", "cordis.patch.yml", "README.md", "OWNER.md"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "license": "MIT"
+}

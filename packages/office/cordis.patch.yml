@@ -1,0 +1,6 @@
+# 办公柱的 bundle patch。
+#
+# 一行 host 行即可：浏览器侧由 package.json 的 dsh.client 声明发现。
+- insert:
+    - id: njau-office
+      name: '@njau-ca/dsh-njau-office'

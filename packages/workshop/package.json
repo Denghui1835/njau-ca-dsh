@@ -1,0 +1,38 @@
+{
+  "name": "@njau-ca/dsh-njau-workshop",
+  "version": "0.1.0",
+  "description": "计协工作坊：一个外壳把三条产线（办公 / 漫剧 / 开发）收进同一处，共用协会身份与数据目录。",
+  "type": "module",
+  "main": "lib/index.js",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "workshop",
+    "plugin"
+  ],
+  "files": [
+    "lib/",
+    "client/",
+    "cordis.patch.yml",
+    "README.md",
+    "OWNER.md"
+  ],
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./client/client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  }
+}

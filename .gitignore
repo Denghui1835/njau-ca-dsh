@@ -1,0 +1,41 @@
+# --- 依赖与构建产物 ---
+node_modules/
+*.tsbuildinfo
+dist/
+build/
+
+# --- DSH 运行期产物 ---
+# profile 装在 ~/.dsh 下，不在仓库里；这里只防手滑把临时文件带进来。
+*.log
+_dumpcfg-*.txt
+_njau-boot.log
+
+# --- 排查时留下的临时输出 ---
+# 跑 doctor / smoke test 时可能顺手重定向出来的文件，别提交。
+_*.out
+_*.txt
+smoke.log
+
+# --- 编辑器 / 系统 ---
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+Desktop.ini
+
+# ============================================================
+#  以下路径**必须**保持被忽略：内部敏感材料绝不进仓库。
+#  详见 docs/vision.md 的「红线」一节与 GOVERNANCE.md 第五节。
+# ============================================================
+# 整改材料、内部汇报、关联方信息、举报内容
+internal/
+private/
+敏感/
+公司汇报*
+*整改*
+*内部*
+
+# --- 数据快照 ---
+# 协会台账的年度快照走 git tag + docs/archive/，不要塞原始数据进主干。
+data-export/
+*.zip

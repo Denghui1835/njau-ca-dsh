@@ -1,0 +1,244 @@
+# 改动记录
+
+> 每届交接时在这里追加。这是「一代一代传下去」的**证据链**。
+> 格式：`## <学年> —— <一句话概括>`，下面列具体改动。
+
+---
+
+## 2026–2027 学年（第一届）
+
+### 立项与方向
+
+- 最初的念头是"给计协做个官网"，反复讨论后**否掉**。
+  理由：网站做完就定型、只能看不能干活、换届即烂尾、容易变成门面工程。
+- 确定新方向：不是做网站，而是基于 DSH 做**协会操作系统** ——
+  一切皆插件，一套系统处理协会大小事务，并**取代官网的位置**。
+- 明确验收标准（负责人原话）：
+  > 「下一届的人能不能在**不问你任何问题**的情况下，把一次纳新完整跑一遍。」
+
+### 新增 `packages/core`
+
+协会底座。数据目录、6 个工具、技能发现、3 个斜杠命令、1 段系统提示词。
+
+- **6 个工具**：`njau_overview`、`njau_data_list`、`njau_data_read`、
+  `njau_data_write`、`njau_data_append`、`njau_doctor`。
+- **3 个命令**：`/njau`、`/njau-doctor`、`/njau-domains`。
+- **技能**：`njau-handbook`（协会章程，讲清楚每个域干什么）。
+- **数据根**：默认 `~/.dsh/njau-ca`，可被 `dataDir` 配置或 `NJAU_CA_DATA` 覆盖。
+- 11 个业务域定义（org / recruit / events / finance / media / report /
+  learning / kb / site / school / compliance）。
+
+### 新增 `packages/brand`
+
+品牌与人设。**双面包**（宿主侧 + 浏览器侧）。
+
+- 宿主侧：协会人设段；注入窗口标题与主题色 CSS。
+- 浏览器侧：占 `sidebar.brand.mark` / `sidebar.brand.name` 两个 slot。
+- 主色 `#0B5FFF` / 深色 `#4D93F8`，覆盖令牌 `--dsw-alias-brand-primary`。
+
+### 新增 `packages/deck`（替代 WPS）
+
+演示文稿插件，**纯宿主侧**，离开 `core` 也能跑（铁律 1）。
+
+- **3 个内置模板**：`recruit`（纳新宣讲，10 页）、`annual-review`（年审汇报，10 页）、
+  `event-proposal`（活动立项答辩，9 页）。
+- **5 个工具**：`njau_deck_templates`、`njau_deck_template`、
+  `njau_deck_outline_write`、`njau_deck_outline_list`、`njau_deck_brief`。
+- **1 个技能**：`njau-deck`（三步流程 + 常见事故 + 红线）。
+- **数据**：`~/.dsh/njau-ca/deck/<slug>.json`，纯文本，可 diff、可进 git。
+
+**关键分工 —— `deck` 不生成 `.pptx`。**
+
+生成 PPTX 需要 Python + python-pptx + LibreOffice，那是 DSH 自带
+`office-pptx` 技能的活儿。`deck` 只负责"计协该讲什么"，
+产出一份「渲染简报」交给 agent 编排。不自己拼 PPTX 的 XML。
+
+**模板与大纲的分界**：模板是**制度**（随插件走，装到哪台机器上都有）；
+大纲是**今年的情况**（放数据目录，不进 git）。
+模板用 Markdown 写，**加一个新模板不用写代码**。
+
+### 技术发现（本项目的核心知识）
+
+这几条是逆向 DSH 源码得出的，**没有官方文档**，是本仓库最值钱的部分：
+
+1. **DSH 没有品牌配置面。** 品牌 = 占 slot。官方鱼形图标是
+   `dsh-client-ui-brand-official` 占 slot 占出来的。要品牌化就得以
+   `priority: -1` 占同一个 slot（`entriesOfSlot` 按 priority 升序取第一个）。
+2. **浏览器插件是模块工厂格式**：`window.__ModuleLoader__.load({ id, factory })`，
+   `factory(require)` **直接 return** 导出对象。
+3. **双面包必须同时声明** `exports["./client"]` 与 `dsh.client.platform`，
+   否则浏览器侧**静默**不加载。
+4. **一个 profile 里的 `@deepseek-ai/*` 包是 junction**，指向
+   `resources\dsh\node_modules\@deepseek-ai\*`，**不是从 npm 装的**。
+   所以新 profile 必须由启动器自己创建，不能手工拷目录。
+5. **`dsh --dump-config` 会合成 profile 树然后直接退出，不启动服务** ——
+   这是安全的验证手段，可以在另一个 DSH 开着的时候跑。
+6. **命令名不能含中文**（正则 `/^[a-z][a-z0-9_-]*$/u`），所以命令一律叫 `njau-*`。
+7. **`@deepseek-ai/dsh-persona` 不能全局挂载**（第二次注册 `deployment:persona-*`
+   段名会抛错），所以人设要自己起一个唯一段名。
+8. **第三方插件的 `ctx.tools.register` 契约**（源码 `core/lib/tools.js` 抄出来的，
+   不是猜的）：`parameters` **必须是规范 JSON Schema**，必填写在**对象级**
+   `required: ["x"]`；属性级 `required: true` 不合法。
+   `output.render(args, value)` 返回 `[{type:'text', text}]`。
+   `execute` 抛异常会被转成 Error 结果，**不会**中断整轮对话。
+9. **技能注册**：`ctx.skills.register({...})` 返回 disposer，要交给
+   `ctx.effect(() => disposer, label)`；`SKILL.md` 的 frontmatter
+   **只解析 `name:` 和 `description:`** 两个键（故意不引 YAML 依赖）。
+   `name` 必须匹配 `/^[a-z0-9]+(?:-[a-z0-9]+)*$/`。
+10. **不声明 `@deepseek-ai/*` peerDependencies 反而最安全**：
+    运行时的兼容性检查**只查已声明的 peer**，不声明就不查。
+11. **`file:` 依赖是被拷进 profile 的，不是软链。** 所以改完插件源码，
+    重启**不生效**；`add` 和 `install --force` 也都不会重新拷贝
+    （pnpm 只看 spec、不看文件内容）。**必须 `remove` 再 `add`。**
+    这条坑过一次：改了 `deck.js` 的正则、重启、行为却没变。
+    判断方法：比一下源码和
+    `%USERPROFILE%\.dsh\profiles\njau\node_modules\@njau-ca\<包>\` 里同名文件的大小。
+
+### 架构决定
+
+确立**三条铁律**（详见 `docs/architecture.md`）：
+
+1. 插件之间**不互相调用**，`core` 不提供任何 Cordis 服务；
+   跨域协作由**人（和 agent）编排多个插件的工具**完成。
+2. **零运行时依赖**：只用 Node 内置模块，不 import 任何 `@deepseek-ai/*` 运行时包。
+3. **数据是纯文本**：Markdown / YAML / JSON，**永不引入数据库**。
+
+补充决定：
+
+- 不导出 schemastery `Config`（cordis 原样传 YAML `config`，默认值与校验都放 `createEnv()`）。
+- **不 fork DSH 界面**。官网位置用 `{kind:'exact', path:'/'}` 影子路由 + 占品牌 slot 实现。
+- profile 用**独立的 `njau`**，不动用户自己的 `desktop`。
+- 铁律 1 的直接代价：`deck` **自己复制了一份** `env` / `skills` 辅助代码，
+  而不是 import `core` 的。这是刻意的 —— 换来的是每个包都能单独摘掉。
+
+### 实测验证（不是"应该能跑"）
+
+环境：DSH `0.2.0-rc.2`、Node `v24.21.0`、pnpm `11.7.0`、profile `njau`。
+
+**真实安装 → 真实启动 → 抓取 HTTP 响应**，观测到：
+
+- 启动日志：
+  `[njau-ca] core 已加载｜南农计协｜2026-2027｜数据 %USERPROFILE%\.dsh\njau-ca｜工具 6 · 技能 1 · 命令 3 · 提示词段 1`
+- 启动日志：`[njau-ca] brand 已接管 Web 品牌：窗口标题 + 主题色（侧栏标识由浏览器侧占 slot 完成）`
+- 启动日志：`[njau-ca] deck 已加载｜模板 3 个｜大纲 0 个｜目录 %USERPROFILE%\.dsh\njau-ca\deck｜工具 5 · 技能 1`
+- `dsh njau --dump-config` 确认三个插件行都在合成树里：
+  `njau-ca-core` / `njau-ca-brand` / `njau-ca-deck`。
+- `GET /` 返回 200，HTML 内含注入的 `--njau-ca-brand-primary: #0B5FFF`、暗色变体、标题脚本。
+- 模块线中出现
+  `{"id":"@njau-ca/dsh-njau-brand","url":"plugins/??@njau-ca/dsh-njau-brand/client.js&rev=...","rev":"...","inject":["@deepseek-ai/dsh-client-ui-renderer","@deepseek-ai/dsh-client-ui-sidebar","@deepseek-ai/dsh-client-ui-theme"]}`。
+- `GET /plugins/??@njau-ca/dsh-njau-brand/client.js&rev=...` 返回 **200**，
+  内容与仓库里的 `lib/client.js` 一致（含两个 slot 注册、`priority: -1`、品牌令牌、中文正常）。
+  > 注意：`&rev=` 的值**必须从 index HTML 里抓**，它不是源码的 sha1；
+  > 漏掉 `&rev=` 会直接 404。
+- `tests/smoke-core.mjs` 通过（假 ctx 跑真实工具 + 全部命令处理器）。
+- `tests/smoke-deck.mjs` 通过，退出码 0，共 33 项检查（5 个工具契约 / 1 个技能 /
+  3 个模板 / 大纲写入与读回 / 路径穿越防护 / 渲染简报 / 错误码）。
+- 直接加载 **profile 里装好的那份** `deck`，读回页数：
+  `annual-review -> 10`、`event-proposal -> 9`、`recruit -> 10`。
+
+### 冒烟测试抓到的一个真 bug（值得记下来）
+
+`deck` 的模板解析原本用 `### N. 标题` 当页标题，但模板文件里写的是 `## N. 标题`
+（`#` 是文档标题，`##` 才是页）。结果 **`slideCount` 一直是 0、页序完全读不出来**，
+而插件启动日志照样打印「模板 3 个」—— **表面上一切正常**。
+
+被发现，是因为冒烟测试断言了 `slideCount === 10`，而不是只断言「加载成功」。
+
+修正：正则放宽成 `/^#{2,3}\s+/`，两种写法都认；并把
+`packages/deck/templates/README.md` 里那句**把 bug 当成规范写进去**的
+「`###` 不行」一并改掉。
+
+> 教训：**只断言"没报错"的测试等于没测。** 要断言具体的值。
+
+### 文档与交接
+
+- `README.md`（总入口）、`HANDOVER.md`（换届清单）、`docs/vision.md`（愿景与路线图）、
+  `docs/architecture.md`（架构与铁律）、`docs/install.md`（安装与验证）。
+- `docs/collaboration.md`（多人协作工作区的三种走法 —— 共享数据目录 / Git 工作区 / 协作中枢插件）。
+- `GOVERNANCE.md`（含红线表）、`CONTRIBUTING.md`、`docs/adr/`（架构决定记录）、
+  `docs/archive/`（年度归档规范）。
+- `scripts/install.ps1` / `uninstall.ps1` / `doctor.ps1`，外层各套一个 `.cmd` 包装。
+  > 脚本**刻意只用 ASCII**：Windows PowerShell 5.1 会把无 BOM 的 UTF-8 中文 .ps1
+  > 读成乱码，在新机器上直接语法错误。中文一律放 `.md`。
+  > 外层 `.cmd` 用 `powershell -NoProfile -ExecutionPolicy Bypass -File` 调它，
+  > 绕开默认执行策略（否则会报「未对文件进行数字签名」）。
+- 每个包配 `README.md` + `OWNER.md`；`doctor` **强制检查**这两个文件存在。
+
+### 当时还没做（后续届继续）
+
+按 `docs/vision.md` 的路线图：`workflow`（防跑飞）、`compliance`（红线内建）、
+`recruit`（验收闭环）、`school`（年审材料 + 表单填充，**最高价值**）、
+`events` / `finance` / `media` / `report`、`library`（共享资源库）、
+`growth`（创业/就业/科研/升学/学习）、`kb`、`site`、
+`hub`（多人协作工作区，方案见 `docs/collaboration.md`）。
+
+> `deck`（替代 WPS）原本也在这个清单里，**已在本届完成**，见上文。
+
+### 已知问题
+
+- 在这台 Windows 机器上，**写文件会间歇性失败**（同一命令有时成功、有时整个不执行，
+  且失败的调用连输出都没有）。已排除权限因素：`tests/` 与能正常写入的目录
+  **ACL 完全相同**，写入窗口是**全局按时间开合**的，与路径、工具、
+  文件大小都无关。对策：**重试**，并且每次写完都用独立的一次往返去**验证文件真的在磁盘上**。
+  > 教训：不要相信"写入成功"的返回值，包括本文档提到的 `edit` 工具
+  > 会**假报成功**。一律复查。
+
+---
+
+### 新增 `packages/workshop` + `packages/office`（工作坊外壳与办公柱）
+
+方向调整：从「一组域插件」升级成「一间工作坊」。三条产线 —— 办公、漫剧、开发 ——
+收进同一个面板，共用协会身份与数据目录。
+
+- **`packages/workshop`（外壳）**：右侧栏「工作坊」面板（首页 / 办公 / 漫剧 / 开发），
+  会话头部一个入口按钮，`/njau/api/workshop/*` 接口，2 个工具
+  （`njau_workshop_state`、`njau_workshop_new_manju`），1 段系统提示词。
+  产线定义集中在 `lib/lines.js` 的 `LINES`，加产线只改这一处。
+- **`packages/office`（办公柱）**：**自带 OOXML 引擎，不依赖 WPS / Office**。
+  - 零运行时依赖的 ZIP 读写（`node:zlib` + 自写 CRC32）与极简 XML 树。
+  - `.docx` 读写：段落 / 文字片段格式 / 表格 / 标题层级 / 页面设置。
+  - 没建模的排版用 `rawPPr` / `rPr` 原文带回，**改一个字不会清空缩进、编号、行距**。
+  - 浏览器侧直接在字上改（contenteditable），保存回真正的 .docx。
+  - 5 个工具（`njau_office_list/read/edit/create/status`）+ `/njau/api/office/*` 接口。
+  - 并发保护：`baseHash` 不匹配即 409 `doc/conflict`，不静默覆盖。
+
+#### 架构决定
+
+- **外壳不许长胖**：只做「看现状 + 导航」，不出图、不配音、不剪片、不编译。
+- **跨插件只走导航**：外壳开办公面板用 `openTab('njau-office')` 与
+  `window.__NJAU_OPEN_OFFICE__(path)`，不 import 办公柱的服务。
+- **每个插件自带一份 env**：`office/lib/env.js`、`workshop/lib/env.js` 各自十几行，
+  读同一个 `identity.json` —— 事实一份，代码解耦（铁律 1 的又一次代价）。
+
+#### 实测验证
+
+- `tests/smoke-workshop.mjs` **70+ 项全绿**：假 ctx 跑真插件 → 挂真 HTTP 服务 →
+  真落 .docx → 再读回；含 409 冲突、路径穿越清洗、错误码、ZIP 头校验。
+- **真实文档往返**：`学习通_学生帮助文档.docx` 读到 353 段 / 12 表格 / 标题 1-4 层级，
+  写回再读**文字零丢失**。
+- **独立解析器交叉验证**：python-docx（完全不同的实现）能打开我们写出的文件，
+  正确识别 `Title` / `Heading 2` / `Normal` 与表格单元格 —— 产出是标准 OOXML，不是自说自话。
+- 真 DSH 里加载：`[njau-workshop] 已加载 … 工具 2`、`[njau-office] 已加载 … 工具 5`；
+  `GET /njau/api/workshop/state` 返回三条产线 + 身份卡；
+  客户端 bundle 随启动载荷下发并含我们的 slot 注册。
+
+#### 还没做
+
+- 漫剧柱：分镜表渲染、出图队列、配音字幕、时间轴合成。
+- 开发柱：代码编辑器面板、项目脚手架、发布流程。
+- 办公柱：xlsx / pptx。
+
+---
+
+<!-- 下一届从这里开始追加：
+
+## 2027–2028 学年 —— <一句话概括>
+
+### 新增
+### 修改
+### 技术发现
+### 架构决定
+### 实测验证
+### 还没做
+
+-->

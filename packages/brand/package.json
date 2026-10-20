@@ -1,0 +1,37 @@
+{
+  "name": "@njau-ca/dsh-njau-brand",
+  "version": "0.1.0",
+  "description": "南农计协 DSH 品牌插件：协会人设 + Web 界面品牌（侧栏标识、标题、主题色）",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "OWNER.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-theme"
+      ]
+    }
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,4 @@
+# 工作坊外壳的 bundle patch。
+- insert:
+    - id: njau-workshop
+      name: '@njau-ca/dsh-njau-workshop'
