@@ -155,5 +155,6 @@ node tests/smoke-workshop.mjs   # 工作坊 + 办公柱：真 HTTP + 真 .docx �
 MIT。见 [`LICENSE`](LICENSE)。
 
 代码开放，**数据不开放** —— 数据归协会所有，单独交接。
+与学校的关系、数据归属、红线清单见 [`NOTICE.md`](NOTICE.md)。
 
 欢迎 fork、抄架构、抄那三条铁律。如果这套东西对你们社团有用，开个 issue 说一声就行。

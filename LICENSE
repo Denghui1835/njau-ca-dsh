@@ -19,14 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-说明：
-
-- 本仓库是**学生社团**的技术项目，与南京农业大学校方无隶属关系，
-  不代表学校立场，也不是学校官方系统。
-- 代码以 MIT 许可开放，方便下一届接手与修改。
-- **协会的业务数据不属于本许可范围。** 数据归协会所有，单独交接，
-  见 GOVERNANCE.md 第六节。
-- 任何让外界误认为本系统是学校官方系统的使用方式，均被明确反对。
