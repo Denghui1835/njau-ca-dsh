@@ -165,6 +165,34 @@ const stateCode = await api('GET', '/njau/api/workshop/state')
 const codeLine = stateCode.data.value.lines.find((line) => line.id === 'code')
 check(codeLine.count >= 1, `工作坊数到了开发项目（${codeLine.count}）`)
 
+console.log('\n--- 办公柱：表格端到端（临时文件） ---')
+const sheetName = `_verify-${Date.now().toString(36)}.xlsx`
+const sheetPath = `report/${sheetName}`
+const sheetCreated = await api('POST', '/njau/api/office/new-sheet', { path: sheetPath, sheetName: '验证表' })
+check(sheetCreated.status === 200, `新建临时表格 ${sheetPath}`)
+const sheetRead = await api('GET', `/njau/api/office/sheet?path=${encodeURIComponent(sheetPath)}`)
+check(sheetRead.status === 200 && sheetRead.data.value.sheets.length === 1, '读回 1 张工作表')
+const sheetModel = { sheets: sheetRead.data.value.sheets }
+sheetModel.sheets[0].rows = [[{ v: '项目' }, { v: '金额' }], [{ v: '打印费' }, { v: '38.5' }]]
+sheetModel.sheets[0].width = 2
+sheetModel.sheets[0].height = 2
+const sheetSaved = await api('POST', '/njau/api/office/sheet', {
+  path: sheetPath,
+  model: sheetModel,
+  baseHash: sheetRead.data.value.hash,
+})
+check(sheetSaved.status === 200, '整表保存 200')
+const sheetBack = await api('GET', `/njau/api/office/sheet?path=${encodeURIComponent(sheetPath)}`)
+check(sheetBack.data.value.sheets[0].rows[1][1].v === '38.5', '单元格内容落盘并读回')
+const sheetFile = join(String(manjuBase), '..', '..', 'report', sheetName)
+check(existsSync(sheetFile), '表格文件真的在磁盘上')
+try {
+  rmSync(sheetFile, { force: true })
+  check(!existsSync(sheetFile), '临时表格已清理')
+} catch (error) {
+  check(false, `临时表格清理失败：${error.message}`)
+}
+
 console.log('\n--- 办公柱能列目录吗 ---')
 const scan = await api('GET', '/njau/api/office/scan')
 check(scan.status === 200, '办公 scan 200')

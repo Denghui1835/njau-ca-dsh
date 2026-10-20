@@ -26,7 +26,7 @@ DSH 的立场是「一切皆插件」。我们顺着这个立场，把协会的�
 
 | 产线 | 干什么 | 状态 |
 | --- | --- | --- |
-| **办公** | 表格、纪要、立项书、报销单、年审材料 —— **自带 OOXML 引擎，不装 WPS/Office 也能直接改 .docx** | ✅ 可用 |
+| **办公** | 表格、纪要、立项书、报销单、年审材料 —— **自带 OOXML 引擎，不装 WPS/Office 也能直接改 .docx 与 .xlsx** | ✅ 可用（pptx 待建） |
 | **漫剧** | 剧本 → 分镜 → 出图 → 配音字幕 → 合成 | 前两步可用（剧本 + 分镜编辑），后三步待建 |
 | **开发** | 协会网站、工具、脚本 —— 文件树 + 自带轻量代码编辑器 + 白名单运行 | ✅ 读写与运行可用，脚手架/发布待建 |
 
@@ -61,7 +61,7 @@ DSH 的立场是「一切皆插件」。我们顺着这个立场，把协会的�
 | [`packages/core`](packages/core) | 协会底座：数据目录、6 个工具、技能发现、斜杠命令、人设段 | 已验证 |
 | [`packages/brand`](packages/brand) | 品牌与人设：侧栏标识、标题、主题色、协会人设 | 已验证 |
 | [`packages/workshop`](packages/workshop) | **工作坊外壳**：三条产线（办公 / 漫剧 / 开发）的统一入口与现状总览 | 外壳已通（三柱待填） |
-| [`packages/office`](packages/office) | **办公柱**：自带 OOXML 引擎，在 DSH 里直接打开、改、存 .docx，不依赖 WPS/Office | 已通（docx 读写 + 可视化编辑） |
+| [`packages/office`](packages/office) | **办公柱**：自带 OOXML 引擎，直接打开、改、存 .docx 与 .xlsx，不依赖 WPS/Office | docx + xlsx 可用（pptx 待建） |
 | [`packages/manju`](packages/manju) | **漫剧柱**：剧本与分镜的编辑器，一条漫剧的所有工序都挂在 `storyboard.json` 上 | 已通前两步（出图/配音/合成待建） |
 | [`packages/code`](packages/code) | **开发柱**：项目发现 + 文件树 + 代码编辑器 + 白名单运行（npm scripts / 只读 git） | 读写与运行可用（脚手架/发布待建） |
 
@@ -150,6 +150,7 @@ node tests/smoke-deck.mjs       # PPT：模板解析 / 大纲写入 / 路径穿�
 node tests/smoke-workshop.mjs   # 工作坊 + 办公柱：真 HTTP + 真 .docx 往返
 node tests/smoke-manju.mjs      # 漫剧柱：分镜增删改排序 / 脏数据修复 / 素材直出
 node tests/smoke-code.mjs       # 开发柱：文件树 / 读写与冲突 / 真跑一次 npm script / 白名单
+node tests/smoke-sheet.mjs      # 表格：新建 / 改格与公式 / 并发冲突 / 落盘往返
 ```
 
 装进 DSH 之后，还可以对一个**正在运行的实例**做端到端体检（会自己建临时项目再删掉）：

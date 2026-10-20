@@ -23,6 +23,16 @@
    段落和文字片段都存着读取时的原始 XML，写回时以它为底。
    删除这两个字段 = 每次保存都在悄悄清空别人的缩进和编号。
 
+## 表格（.xlsx）这边额外要小心的两件事
+
+1. **写回时只替换各个 `xl/worksheets/sheetN.xml`，其余部件原样搬。**
+   所以样式表、主题、sharedStrings、图片图表都还在。同理：如果把
+   `readXlsx()` 里抓的 `rawCols` / `rawSheetViews` / `merges` 弄丢，
+   下次保存就会把列宽、冻结窗格、合并单元格清掉 —— 那是最容易被抱怨的「我什么都没改，格式就乱了」。
+2. **不能新增工作表，只能改名。**
+   加工作表要同时改 `workbook.xml`、`_rels/workbook.xml.rels`、`[Content_Types].xml` 三处，
+   漏一处 Word 就会说文件损坏。现在明确报错，比写出坏文件好。
+
 ## 改代码之后怎么让它生效（踩过的坑）
 
 `file:` 依赖是**拷贝**进 profile 的，不是软链。改完必须 remove + add：

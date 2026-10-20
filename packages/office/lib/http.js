@@ -51,6 +51,8 @@ function readBody(req) {
 /** 把 service 的返回值直接映射成 HTTP 状态码。 */
 function statusOf(code) {
   if (code === 'doc/conflict') return 409
+  if (code === 'sheet/conflict') return 409
+  if (code === 'sheet/not-found') return 404
   if (code === 'file/missing' || code === 'dir/missing') return 404
   if (code === 'file/exists') return 409
   if (code === 'path/invalid' || code === 'model/invalid' || code === 'ops/invalid') return 400
@@ -87,6 +89,22 @@ export function registerHttp(ctx, service, options = {}) {
         const path = url.searchParams.get('path')
         if (path === null) return send(res, 400, { ok: false, error: { code: 'path/invalid', message: '缺少 path' } })
         const result = service.stat(path)
+        return send(res, result.ok ? 200 : statusOf(result.error.code), result)
+      }
+      if (req.method === 'GET' && route === '/sheet') {
+        const path = url.searchParams.get('path')
+        if (path === null) return send(res, 400, { ok: false, error: { code: 'path/invalid', message: '缺少 path' } })
+        const result = service.readSheet(path)
+        return send(res, result.ok ? 200 : statusOf(result.error.code), result)
+      }
+      if (req.method === 'POST' && route === '/sheet') {
+        const body = await readBody(req)
+        const result = service.saveSheet(body.path, body.model, body.baseHash)
+        return send(res, result.ok ? 200 : statusOf(result.error.code), result)
+      }
+      if (req.method === 'POST' && route === '/new-sheet') {
+        const body = await readBody(req)
+        const result = service.createSheet(body.path, body.sheetName)
         return send(res, result.ok ? 200 : statusOf(result.error.code), result)
       }
       if (req.method === 'GET' && route === '/doc') {

@@ -288,6 +288,39 @@
   语法检查、接口测试、端到端全过，只有颜色不生效 —— 靠比对下发 bundle 里的字符串才发现。
   教训写进了 `packages/code/OWNER.md`。
 
+### 办公柱新增 `.xlsx`（表格读写 + 网格编辑器）
+
+协会最高频的表格活儿（报名表、报销单、年审台账）现在也能在面板里直接改。
+
+- **引擎**：`xlsx-read.js` / `xlsx-write.js`，与 docx 共用 `zip.js` + `xml.js`。
+  读：workbook → 各 sheet → 单元格（共享字符串 / 内联字符串 / 数字 / 布尔 / 公式 / 样式下标）；
+  写：只替换各个 `xl/worksheets/sheetN.xml`，其余部件原样搬。
+- **保真**：列宽（`rawCols`）、冻结窗格（`rawSheetViews`）、合并单元格（`merges`）、
+  单元格样式下标（`s`）都原样带回 —— 只改一个格子不会把别人的格式清掉。
+- **面板**：同一个「办公」面板按扩展名分流 —— `.docx` 进纸页编辑器，`.xlsx` 进网格编辑器
+  （工作表切换、加删行列、更多行/列分页，避免 200×200 的表一次性渲染成 4 万个输入框）。
+- **agent**：`njau_office_sheet_read` / `njau_office_sheet_edit` / `njau_office_sheet_create`，
+  操作 `set_cell` / `clear_cell` / `insert_row` / `delete_row` / `set_row` / `set_sheet_name`，
+  单元格用 A1 记法定位，公式直接给 `formula`。
+- 并发保护与其他文件一致：`baseHash` 不匹配即 409（`sheet/conflict`）。
+
+#### 实测验证
+
+- **真实文件往返**（工作区里的三份真表格）：
+  `计协招新汇总表.xlsx`（1 表）、`计协招新_需求与意向汇总.xlsx`（5 表）、
+  `志愿者案例采集模板_v1.xlsx`（9 表 × 206 行）——读一遍、写一遍、再读一遍，
+  **逐格比对内容完全一致**（含公式文本），表数与尺寸不变。
+- `tests/smoke-sheet.mjs` 全绿：新建 → 6 个操作（含 `set_row`、`set_cell`、公式、改名）
+  → 落盘回读 → 409 冲突 → 非法 ref → 不存在的表 → 文本视图 → 整表保存 → scan 带 `kind`。
+- `scripts/verify-live.mjs` 加了一段表格端到端：对运行中的实例建临时 .xlsx
+  → 读回 → 整表保存 → 单元格落盘校验 → **自动删掉临时文件**。
+
+#### 已知边界（写进 README 与 OWNER）
+
+- 上限 5000 行 × 64 列（读时截断并标 `truncated`）；
+- 手改一格会覆盖该格原有公式（公式原文仍在 tooltip）；
+- 不能新增工作表（能改名）；加表要同步改 workbook.xml / rels / content types，漏一处就「文件损坏」。
+
 ### 开源
 
 - 仓库以 **MIT** 公开：https://github.com/Denghui1835/njau-ca-dsh

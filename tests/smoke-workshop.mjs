@@ -101,7 +101,7 @@ check(workshopMod.inject.includes('webServer'), '工作坊 inject webServer')
 officeMod.apply(office.ctx, {})
 workshopMod.apply(workshop.ctx, {})
 
-check(office.tools.size === 5, `办公柱注册 5 个工具（实际 ${office.tools.size}）`)
+check(office.tools.size === 8, `办公柱注册 8 个工具（实际 ${office.tools.size}）`)
 check(workshop.tools.size === 2, `工作坊注册 2 个工具（实际 ${workshop.tools.size}）`)
 check(office.routes.length === 1 && office.routes[0].path === '/njau/api/office', '办公柱注册了 /njau/api/office')
 check(workshop.routes.length === 1 && workshop.routes[0].path === '/njau/api/workshop', '工作坊注册了 /njau/api/workshop')

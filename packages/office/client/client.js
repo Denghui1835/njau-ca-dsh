@@ -150,6 +150,18 @@ window.__ModuleLoader__.load({
 
     const paragraphText = (block) => (block.runs ?? []).map((run) => run.text).join('')
 
+    /** 列号 → 字母（0 → A，26 → AA），表格表头用。 */
+    function colName(col) {
+      let name = ''
+      let n = col + 1
+      while (n > 0) {
+        const rem = (n - 1) % 26
+        name = String.fromCharCode(65 + rem) + name
+        n = Math.floor((n - 1) / 26)
+      }
+      return name
+    }
+
     function cloneFormat(run) {
       const out = { ...BASE_FORMAT }
       if (run !== undefined) {
@@ -222,6 +234,14 @@ window.__ModuleLoader__.load({
 .ws-input{height:28px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-2);color:inherit;font:inherit;font-size:12px;padding:0 8px;width:340px;max-width:100%}
 .ws-error{margin:0 8px;padding:8px 10px;border-radius:6px;background:var(--dsw-alias-state-warn-tertiary);color:var(--dsw-alias-label-error);font-size:12px;white-space:pre-wrap}
 .ws-hint{font-size:11px;color:var(--dsw-alias-label-tertiary);text-align:center;max-width:560px;line-height:1.6}
+.ws-sheet-canvas{flex:1 1 auto;min-height:0;overflow:auto;padding:8px;background:var(--dsw-alias-bg-layer-1)}
+.ws-sheet{border-collapse:separate;border-spacing:0;font-size:11.5px;background:#fff;color:#111}
+.ws-sheet th{position:sticky;top:0;z-index:1;background:#f0f0f0;color:#555;font-weight:500;font-size:10.5px;padding:2px 4px;border:1px solid #d0d0d0;min-width:78px;text-align:center}
+.ws-sheet th.ws-rownum{left:0;z-index:2;min-width:34px;text-align:right;color:#666;background:#f0f0f0}
+.ws-sheet td{border:1px solid #e0e0e0;padding:0}
+.ws-cell{width:100%;box-sizing:border-box;border:0;outline:none;background:transparent;color:inherit;font:inherit;font-size:11.5px;padding:3px 5px;min-width:78px}
+.ws-cell:focus{background:#eef5ff;box-shadow:inset 0 0 0 2px #0b5fff}
+.ws-sheet-foot{flex:0 0 auto;padding:4px 8px;border-top:1px solid var(--dsw-alias-border-l2);font-size:11px;color:var(--dsw-alias-label-tertiary);background:var(--dsw-alias-bg-layer-1)}
 `
 
     function ensureStyle() {
@@ -249,6 +269,7 @@ window.__ModuleLoader__.load({
     function WpsDocumentTab() {
       const shared = usePanelState()
       const [doc, setDoc] = useState(null)
+      const [sheet, setSheet] = useState(null)
       const [files, setFiles] = useState([])
       const [error, setError] = useState('')
       const [notice, setNotice] = useState('')
@@ -257,13 +278,18 @@ window.__ModuleLoader__.load({
       const [rev, setRev] = useState(0)
       const [newName, setNewName] = useState('')
       const [showPicker, setShowPicker] = useState(false)
+      const [viewRows, setViewRows] = useState(30)
+      const [viewCols, setViewCols] = useState(14)
+      const [activeSheet, setActiveSheet] = useState(0)
 
       const docRef = useRef(null)
+      const sheetRef = useRef(null)
       const pageRef = useRef(null)
       const activeIndex = useRef(-1)
       const pendingCaret = useRef(null)
 
       docRef.current = doc
+      sheetRef.current = sheet
 
       const flash = useCallback((message) => {
         setNotice(message)
@@ -277,14 +303,26 @@ window.__ModuleLoader__.load({
       const load = useCallback(async (path, options = {}) => {
         setBusy(true)
         setError('')
+        const isSheet = /\.(xlsx|xlsm)$/i.test(path)
         try {
-          const value = await call(`/doc?path=${encodeURIComponent(path)}`)
-          setDoc(value)
-          docRef.current = value
+          if (isSheet) {
+            const value = await call(`/sheet?path=${encodeURIComponent(path)}`)
+            setSheet(value)
+            sheetRef.current = value
+            setDoc(null)
+            docRef.current = null
+            setActiveSheet(0)
+          } else {
+            const value = await call(`/doc?path=${encodeURIComponent(path)}`)
+            setDoc(value)
+            docRef.current = value
+            setSheet(null)
+            sheetRef.current = null
+            setRev((r) => r + 1)
+          }
           setDirty(false)
-          setRev((r) => r + 1)
           setShowPicker(false)
-          publish({ path: value.path })
+          publish({ path: path })
           if (options.silent !== true) flash(`已打开 ${value.name}`)
         } catch (failure) {
           setError(failure.message)
@@ -333,6 +371,114 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
+      const createSheet = useCallback(async () => {
+        const name = newName.trim()
+        if (name === '') {
+          setError('先写个文件名，例如 报名表.xlsx')
+          return
+        }
+        const fileName = /\.xlsx$/i.test(name) ? name : `${name}.xlsx`
+        setBusy(true)
+        setError('')
+        try {
+          const value = await post('/new-sheet', { path: fileName, sheetName: '' })
+          setNewName('')
+          await load(value.path)
+        } catch (failure) {
+          setError(failure.message)
+          setBusy(false)
+        }
+      }, [newName, load])
+
+      // ---- 表格编辑
+
+      const saveSheet = useCallback(async () => {
+        const current = sheetRef.current
+        if (current === null) return
+        setBusy(true)
+        setError('')
+        try {
+          const result = await post('/sheet', {
+            path: current.path,
+            model: { sheets: current.sheets },
+            baseHash: current.hash,
+          })
+          const next = { ...current, hash: result.hash, bytes: result.bytes }
+          setSheet(next)
+          sheetRef.current = next
+          setDirty(false)
+          flash('表格已保存')
+        } catch (failure) {
+          setError(failure.message)
+        } finally {
+          setBusy(false)
+        }
+      }, [flash])
+
+      /** 改一个单元格：保留原样式下标；公式会被覆盖（表格里手改值就是这个意思）。 */
+      const setCell = useCallback((sheetIndex, row, col, value) => {
+        setSheet((previous) => {
+          if (previous === null) return previous
+          const sheets = previous.sheets.map((item, index) => {
+            if (index !== sheetIndex) return item
+            const rows = item.rows.map((line) => line.slice())
+            while (rows.length <= row) rows.push([])
+            const line = rows[row]
+            while (line.length <= col) line.push(null)
+            const existing = line[col]
+            const text = String(value ?? '')
+            line[col] = text === ''
+              ? null
+              : { v: text, ...(existing?.s !== undefined ? { s: existing.s } : {}) }
+            return { ...item, rows, height: Math.max(item.height ?? 0, rows.length), width: Math.max(item.width ?? 0, col + 1) }
+          })
+          return { ...previous, sheets }
+        })
+        markDirty()
+      }, [markDirty])
+
+      const addRow = useCallback(() => {
+        setSheet((previous) => {
+          if (previous === null) return previous
+          const sheets = previous.sheets.map((item, index) => {
+            if (index !== activeSheet) return item
+            const rows = item.rows.concat([Array.from({ length: item.width ?? 1 }, () => null)])
+            return { ...item, rows, height: rows.length }
+          })
+          return { ...previous, sheets }
+        })
+        markDirty()
+        setViewRows((n) => n + 1)
+      }, [activeSheet, markDirty])
+
+      const removeLastRow = useCallback(() => {
+        setSheet((previous) => {
+          if (previous === null) return previous
+          const sheets = previous.sheets.map((item, index) => {
+            if (index !== activeSheet) return item
+            if (item.rows.length <= 1) return item
+            const rows = item.rows.slice(0, -1)
+            return { ...item, rows, height: rows.length }
+          })
+          return { ...previous, sheets }
+        })
+        markDirty()
+      }, [activeSheet, markDirty])
+
+      const addCol = useCallback(() => {
+        setSheet((previous) => {
+          if (previous === null) return previous
+          const sheets = previous.sheets.map((item, index) => {
+            if (index !== activeSheet) return item
+            const rows = item.rows.map((line) => line.concat([null]))
+            return { ...item, rows, width: (item.width ?? 1) + 1 }
+          })
+          return { ...previous, sheets }
+        })
+        markDirty()
+        setViewCols((n) => n + 1)
+      }, [activeSheet, markDirty])
+
       const createDoc = useCallback(async () => {
         const name = newName.trim()
         if (name === '') {
@@ -362,8 +508,10 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         const target = shared.path
         if (target === null) return
-        const current = docRef.current
-        if (current !== null && current.path === target) return
+        const currentDoc = docRef.current
+        const currentSheet = sheetRef.current
+        if (currentDoc !== null && currentDoc.path === target) return
+        if (currentSheet !== null && currentSheet.path === target) return
         void load(target, { silent: true })
       }, [shared.path, load])
 
@@ -371,7 +519,9 @@ window.__ModuleLoader__.load({
 
       useEffect(() => {
         const timer = window.setInterval(async () => {
-          const current = docRef.current
+          const currentDoc = docRef.current
+          const currentSheet = sheetRef.current
+          const current = currentDoc ?? currentSheet
           if (current === null || dirty || document.visibilityState !== 'visible') return
           try {
             const value = await call(`/stat?path=${encodeURIComponent(current.path)}`)
@@ -573,6 +723,14 @@ window.__ModuleLoader__.load({
 
       const status = busy ? '处理中…' : notice !== '' ? notice : dirty ? '未保存' : '已同步'
 
+      // 文档与表格共用的「重新读一遍」
+      const refreshAny = useCallback(() => {
+        const target = sheetRef.current?.path ?? docRef.current?.path
+        if (target === undefined) return
+        if (dirty && !window.confirm('有未保存的修改，刷新会丢掉它们。继续？')) return
+        void load(target, { silent: true })
+      }, [dirty, load])
+
       const header = h('div', { className: 'ws-toolbar' },
         h('button', {
           type: 'button',
@@ -584,15 +742,15 @@ window.__ModuleLoader__.load({
         h('button', {
           type: 'button',
           className: 'ws-btn',
-          disabled: busy || doc === null,
-          onClick: save,
-          title: '写回 .docx（Ctrl+S）',
+          disabled: busy || (doc === null && sheet === null),
+          onClick: () => (sheetRef.current !== null ? void saveSheet() : save()),
+          title: '写回文件（Ctrl+S）',
         }, '保存'),
         h('button', {
           type: 'button',
           className: 'ws-btn',
-          disabled: busy || doc === null,
-          onClick: refresh,
+          disabled: busy || (doc === null && sheet === null),
+          onClick: refreshAny,
           title: '重新从磁盘读一遍',
         }, '刷新'),
         h('div', { className: 'ws-sep' }),
@@ -615,10 +773,72 @@ window.__ModuleLoader__.load({
         h('button', { type: 'button', className: 'ws-btn', disabled: doc === null, onClick: appendTable, title: '在文末插入表格' }, '表格'),
         h('div', { className: 'ws-status' },
           h('span', { className: 'ws-dot', 'data-dirty': dirty ? 'true' : 'false' }),
-          h('span', { className: 'ws-name', title: doc?.path ?? '' }, doc === null ? '未打开文件' : doc.name),
+          h('span', { className: 'ws-name', title: doc?.path ?? sheet?.path ?? '' },
+            doc !== null ? doc.name : sheet !== null ? sheet.name : '未打开文件'),
           h('span', null, status),
         ),
       )
+
+      // ---- 表格模式：网格编辑器（docx 的纸页渲染在这里让位）
+      if (sheet !== null) {
+        const current = sheet.sheets[activeSheet] ?? sheet.sheets[0]
+        const showRows = Math.min(current.rows.length, viewRows)
+        const showCols = Math.min(current.width, viewCols)
+        const rows = []
+        for (let r = 0; r < showRows; r += 1) {
+          const cells = [h('th', { key: 'n', className: 'ws-rownum' }, String(r + 1))]
+          for (let c = 0; c < showCols; c += 1) {
+            const cell = current.rows[r]?.[c] ?? null
+            cells.push(h('td', { key: c },
+              h('input', {
+                className: 'ws-cell',
+                value: cell?.v ?? '',
+                ...(cell?.f ? { title: `=${cell.f}` } : {}),
+                onChange: (event) => setCell(activeSheet, r, c, event.currentTarget.value),
+              })))
+          }
+          rows.push(h('tr', { key: r }, cells))
+        }
+        return h('div', { className: 'ws-root' },
+          h('div', { className: 'ws-toolbar' },
+            h('button', { type: 'button', className: 'ws-btn', disabled: busy, onClick: listFiles, title: '换一个文件' }, '打开'),
+            h('button', { type: 'button', className: 'ws-btn ws-btn-primary', disabled: busy, onClick: () => void saveSheet() }, '保存'),
+            h('button', { type: 'button', className: 'ws-btn', disabled: busy, onClick: refreshAny }, '刷新'),
+            h('div', { className: 'ws-sep' }),
+            sheet.sheets.length > 1
+              ? h('select', {
+                className: 'ws-select',
+                value: String(activeSheet),
+                onChange: (event) => setActiveSheet(Number(event.currentTarget.value)),
+              }, sheet.sheets.map((item, index) => h('option', { key: index, value: String(index) }, item.name)))
+              : h('span', { className: 'ws-hint' }, current.name),
+            h('button', { type: 'button', className: 'ws-btn', disabled: busy, onClick: addRow, title: '在末尾加一行' }, '+ 行'),
+            h('button', { type: 'button', className: 'ws-btn', disabled: busy, onClick: removeLastRow, title: '删掉最后一行' }, '− 行'),
+            h('button', { type: 'button', className: 'ws-btn', disabled: busy, onClick: addCol, title: '在末尾加一列' }, '+ 列'),
+            h('div', { className: 'ws-sep' }),
+            h('button', { type: 'button', className: 'ws-btn', onClick: () => setViewRows((n) => n + 30) }, '更多行'),
+            h('button', { type: 'button', className: 'ws-btn', onClick: () => setViewCols((n) => n + 10) }, '更多列'),
+            h('div', { className: 'ws-status' },
+              h('span', { className: 'ws-dot', 'data-dirty': dirty ? 'true' : 'false' }),
+              h('span', { className: 'ws-name', title: sheet.path }, sheet.name),
+              h('span', null, status),
+            ),
+          ),
+          error !== '' ? h('div', { className: 'ws-error' }, error) : null,
+          h('div', { className: 'ws-sheet-canvas' },
+            h('table', { className: 'ws-sheet' },
+              h('thead', null, h('tr', null,
+                h('th', { className: 'ws-rownum' }, ''),
+                Array.from({ length: showCols }, (_, c) => h('th', { key: c }, colName(c))),
+              )),
+              h('tbody', null, rows),
+            ),
+          ),
+          h('div', { className: 'ws-sheet-foot' },
+            `${current.width} 列 × ${current.rows.length} 行 · 正在显示前 ${showRows} × ${showCols}` +
+            ' · 手改一个格子会覆盖它原有的公式（公式仍在 tooltip 里可见）'),
+        )
+      }
 
       if (doc === null) {
         return h('div', { className: 'ws-root' },
@@ -627,8 +847,8 @@ window.__ModuleLoader__.load({
           h('div', { className: 'ws-empty' },
             h('h3', null, '办公'),
             h('div', { className: 'ws-hint' },
-              '协会的表格、纪要、立项书、年审材料都在这儿改 —— 直接改字，保存回真正的 .docx，不需要 WPS 或 Office。'),
-            h('div', { style: { display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 } },
+              '协会的文档与表格都在这儿改 —— 直接改字、直接改格子，保存回真正的 .docx / .xlsx，不需要 WPS 或 Office。'),
+            h('div', { style: { display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' } },
               h('input', {
                 className: 'ws-input',
                 placeholder: '新文件名，例如 会议纪要（自动补 .docx）',
@@ -636,15 +856,23 @@ window.__ModuleLoader__.load({
                 onChange: (event) => setNewName(event.currentTarget.value),
                 onKeyDown: (event) => { if (event.key === 'Enter') void createDoc() },
               }),
-              h('button', { type: 'button', className: 'ws-btn ws-btn-primary', disabled: busy, onClick: () => void createDoc() }, '新建'),
+              h('button', { type: 'button', className: 'ws-btn ws-btn-primary', disabled: busy, onClick: () => void createDoc() }, '新建文档'),
+              h('button', {
+                type: 'button',
+                className: 'ws-btn',
+                disabled: busy,
+                onClick: () => void createSheet(),
+                title: '同名会自动补 .xlsx',
+              }, '新建表格'),
             ),
-            h('button', { type: 'button', className: 'ws-btn', disabled: busy, onClick: listFiles }, '浏览已有文档'),            files.length > 0
+            h('button', { type: 'button', className: 'ws-btn', disabled: busy, onClick: listFiles }, '浏览已有文件'),
+            files.length > 0
               ? h('div', { className: 'ws-filelist' }, files.map((file) => h('button', {
                 key: file.path,
                 type: 'button',
                 className: 'ws-filerow',
                 onClick: () => void load(file.path),
-              }, h('span', null, file.name), h('span', null, `${Math.round(file.bytes / 1024)} KB`))))
+              }, h('span', null, `${file.name}${file.kind === 'xlsx' ? '  ·表格' : ''}`), h('span', null, `${Math.round(file.bytes / 1024)} KB`))))
               : null,
           ),
         )

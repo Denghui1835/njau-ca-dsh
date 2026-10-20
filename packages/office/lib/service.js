@@ -11,9 +11,24 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync,
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { readDocx, docToText } from './docx-read.js'
 import { createDocx, writeDocx } from './docx-write.js'
+import { readXlsx, sheetToText } from './xlsx-read.js'
+import { createXlsx, writeXlsx } from './xlsx-write.js'
+import { applySheetOp, findSheet } from './sheet-ops.js'
 
 const OK = (value) => ({ ok: true, value })
 const FAIL = (code, message) => ({ ok: false, error: { code, message } })
+
+/** 办公柱管的两类文件：Word 文档与 Excel 表格。 */
+const DOC_EXT = new Set(['.docx', '.doc'])
+const SHEET_EXT = new Set(['.xlsx', '.xlsm'])
+const OFFICE_EXT = new Set([...DOC_EXT, ...SHEET_EXT])
+
+const kindOf = (name) => {
+  const ext = extname(name).toLowerCase()
+  if (SHEET_EXT.has(ext)) return 'xlsx'
+  if (DOC_EXT.has(ext)) return 'docx'
+  return 'other'
+}
 
 function hashOf(buffer) {
   return createHash('sha256').update(buffer).digest('hex').slice(0, 16)
@@ -39,7 +54,13 @@ function writeAtomic(path, buffer) {
 function assertDocPath(path) {
   if (typeof path !== 'string' || path.trim() === '') throw new Error('path 不能为空')
   const ext = extname(path).toLowerCase()
-  if (ext !== '.docx' && ext !== '.doc') throw new Error(`只支持 .docx（收到 ${ext || '无扩展名'}）`)
+  if (!DOC_EXT.has(ext)) throw new Error(`只支持 .docx（收到 ${ext || '无扩展名'}）`)
+}
+
+function assertSheetPath(path) {
+  if (typeof path !== 'string' || path.trim() === '') throw new Error('path 不能为空')
+  const ext = extname(path).toLowerCase()
+  if (!SHEET_EXT.has(ext)) throw new Error(`只支持 .xlsx（收到 ${ext || '无扩展名'}）`)
 }
 
 export function createDocService(ctx, config = {}) {
@@ -67,25 +88,31 @@ export function createDocService(ctx, config = {}) {
       return OK({ path: abs, hash: hashOf(buffer), bytes: st.size, mtime: st.mtime.toISOString() })
     },
 
-    /** 列出某个目录下的 Word 文档（默认 root）。 */
+    /** 列出某个目录下的办公文件（.docx 与 .xlsx，默认 root）。 */
     list(dir) {
       const base = dir === undefined || dir === '' ? root : resolvePath(dir)
       if (!existsSync(base)) return FAIL('dir/missing', `目录不存在：${base}`)
       const out = []
       for (const entry of readdirSync(base, { withFileTypes: true })) {
         if (!entry.isFile()) continue
-        const ext = extname(entry.name).toLowerCase()
-        if (ext !== '.docx') continue
+        if (!OFFICE_EXT.has(extname(entry.name).toLowerCase())) continue
         const abs = join(base, entry.name)
         const stat = statSync(abs)
-        out.push({ name: entry.name, path: abs, rel: relative(root, abs), bytes: stat.size, mtime: stat.mtime.toISOString() })
+        out.push({
+          name: entry.name,
+          path: abs,
+          rel: relative(root, abs).split(/[\\/]/).join('/'),
+          kind: kindOf(entry.name),
+          bytes: stat.size,
+          mtime: stat.mtime.toISOString(),
+        })
       }
       out.sort((a, b) => b.mtime.localeCompare(a.mtime))
       return OK({ root, dir: base, count: out.length, files: out })
     },
 
     /**
-     * 扫一遍整棵数据目录：按一级目录（业务域）分组列出 .docx。
+     * 扫一遍整棵数据目录：按一级目录（业务域）分组列出办公文件。
      * 协会文档天然按域归档，所以不需要谁再手工建索引。
      */
     scan() {
@@ -98,7 +125,7 @@ export function createDocService(ctx, config = {}) {
             walk(abs)
             continue
           }
-          if (extname(entry.name).toLowerCase() !== '.docx') continue
+          if (!OFFICE_EXT.has(extname(entry.name).toLowerCase())) continue
           const rel = relative(root, abs).split(/[\\/]/)
           const domain = rel.length > 1 ? rel[0] : '(根目录)'
           const stat = statSync(abs)
@@ -107,6 +134,7 @@ export function createDocService(ctx, config = {}) {
             name: entry.name,
             path: abs,
             rel: rel.join('/'),
+            kind: kindOf(entry.name),
             bytes: stat.size,
             mtime: stat.mtime.toISOString(),
           })
@@ -119,6 +147,132 @@ export function createDocService(ctx, config = {}) {
         return { domain, count: files.length, files }
       }).sort((a, b) => b.files[0].mtime.localeCompare(a.files[0].mtime))
       return OK({ root, domains, total: domains.reduce((sum, d) => sum + d.count, 0) })
+    },
+
+    // ---------------------------------------------------------------- 表格
+
+    /** 读表格模型（所有工作表）。 */
+    readSheet(path) {
+      try {
+        assertSheetPath(path)
+      } catch (error) {
+        return FAIL('path/invalid', error.message)
+      }
+      const abs = resolvePath(path)
+      if (!existsSync(abs)) return FAIL('file/missing', `文件不存在：${abs}`)
+      try {
+        const buffer = readFileSync(abs)
+        const { sheets, parts } = readXlsx(buffer)
+        return OK({
+          path: abs,
+          name: abs.split(/[\\/]/).pop(),
+          kind: 'xlsx',
+          hash: hashOf(buffer),
+          bytes: buffer.length,
+          sheets,
+          parts,
+        })
+      } catch (error) {
+        return FAIL('xlsx/parse-failed', `解析失败：${error.message}`)
+      }
+    },
+
+    /** 存表格模型（sheet 数量不能比原文件多 —— 新增工作表不在这一版范围）。 */
+    saveSheet(path, model, baseHash) {
+      try {
+        assertSheetPath(path)
+      } catch (error) {
+        return FAIL('path/invalid', error.message)
+      }
+      const abs = resolvePath(path)
+      if (model === null || typeof model !== 'object' || !Array.isArray(model.sheets) || model.sheets.length === 0) {
+        return FAIL('model/invalid', 'model.sheets 必须是非空数组')
+      }
+      let original
+      if (existsSync(abs)) {
+        original = readFileSync(abs)
+        const current = hashOf(original)
+        if (typeof baseHash === 'string' && baseHash !== '' && baseHash !== current) {
+          return FAIL('sheet/conflict', `文件已被改动（现有 ${current}，你打开的是 ${baseHash}）。先刷新再保存。`)
+        }
+      }
+      try {
+        const buffer = writeXlsx(model, original)
+        writeAtomic(abs, buffer)
+        return OK({ path: abs, hash: hashOf(buffer), bytes: buffer.length })
+      } catch (error) {
+        return FAIL('xlsx/write-failed', `写入失败：${error.message}`)
+      }
+    },
+
+    /** 新建一个表格（单工作表，已存在则拒绝）。 */
+    createSheet(path, sheetName) {
+      try {
+        assertSheetPath(path)
+      } catch (error) {
+        return FAIL('path/invalid', error.message)
+      }
+      const abs = resolvePath(path)
+      if (existsSync(abs)) return FAIL('file/exists', `文件已存在：${abs}`)
+      try {
+        const name = typeof sheetName === 'string' && sheetName.trim() !== '' ? sheetName.trim() : 'Sheet1'
+        const buffer = createXlsx({ sheetName: name })
+        writeAtomic(abs, buffer)
+        return OK({ path: abs, hash: hashOf(buffer), bytes: buffer.length, sheetName: name })
+      } catch (error) {
+        return FAIL('xlsx/create-failed', `创建失败：${error.message}`)
+      }
+    },
+
+    /** 按操作改表格（给 agent 用）：读 → 逐条 apply → 写。 */
+    editSheet(path, ops, sheetName) {
+      if (!Array.isArray(ops) || ops.length === 0) return FAIL('ops/invalid', 'ops 必须是非空数组')
+      const read = this.readSheet(path)
+      if (!read.ok) return read
+      const model = { sheets: read.value.sheets }
+      let sheet
+      try {
+        sheet = findSheet(model, sheetName)
+      } catch (error) {
+        return FAIL('sheet/not-found', error.message)
+      }
+      const applied = []
+      for (const [index, op] of ops.entries()) {
+        try {
+          applied.push({ op: op?.op ?? '?', result: applySheetOp(sheet, op) })
+        } catch (error) {
+          return FAIL('ops/failed', `第 ${index + 1} 个操作失败（${op?.op ?? '?'}）：${error.message}`)
+        }
+      }
+      const saved = this.saveSheet(path, model, read.value.hash)
+      if (!saved.ok) return saved
+      return OK({
+        path: saved.value.path,
+        hash: saved.value.hash,
+        sheet: sheet.name,
+        width: sheet.width,
+        height: sheet.height,
+        applied,
+        preview: sheetToText(sheet, { maxRows: 20 }),
+      })
+    },
+    sheetText(path, sheetName) {
+      const read = this.readSheet(path)
+      if (!read.ok) return read
+      const sheet = sheetName === undefined
+        ? read.value.sheets[0]
+        : read.value.sheets.find((item) => item.name === sheetName)
+      if (sheet === undefined) {
+        return FAIL('sheet/not-found', `没有工作表：${sheetName}（现有 ${read.value.sheets.map((s) => s.name).join(', ')}）`)
+      }
+      return OK({
+        path: read.value.path,
+        name: sheet.name,
+        width: sheet.width,
+        height: sheet.height,
+        ...(sheet.truncated === true ? { truncated: true } : {}),
+        text: sheetToText(sheet),
+      })
     },
 
     /** 读文档模型。 */

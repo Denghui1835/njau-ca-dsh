@@ -197,6 +197,97 @@ export function registerTools(ctx, service) {
     },
   })
 
+  // ---------------------------------------------------------------- 表格
+
+  register('njau_office_sheet_read', {
+    description:
+      '读一个 .xlsx 的结构：有哪几张工作表、各自多少行多少列，并把指定工作表的内容按' +
+      '「行号 + 制表符分隔」打出来。改表格前先用它看内容。',
+    parameters: objectSchema({
+      path: { type: 'string', description: '.xlsx 路径（绝对或相对数据目录）。' },
+      sheet: { type: 'string', description: '工作表名；留空读第一张。' },
+      max_rows: { type: 'number', description: '最多打多少行（默认 200）。' },
+    }, ['path']),
+    behavior: 'read',
+    execute(args) {
+      const read = service.readSheet(args?.path)
+      if (!read.ok) return pass(read)
+      const sheets = read.value.sheets.map((sheet) => ({
+        name: sheet.name,
+        width: sheet.width,
+        height: sheet.height,
+        ...(sheet.truncated === true ? { truncated: true } : {}),
+      }))
+      const target = args?.sheet === undefined
+        ? read.value.sheets[0]
+        : read.value.sheets.find((sheet) => sheet.name === args.sheet)
+      if (target === undefined) {
+        return { ok: false, error: { code: 'sheet/not-found', message: `没有工作表「${args.sheet}」，现有：${sheets.map((s) => s.name).join(', ')}` } }
+      }
+      const text = service.sheetText(args?.path, target.name)
+      if (!text.ok) return pass(text)
+      return {
+        path: text.value.path,
+        sheets,
+        sheet: target.name,
+        width: text.value.width,
+        height: text.value.height,
+        ...(text.value.truncated === true ? { truncated: true } : {}),
+        text: text.value.text,
+      }
+    },
+  })
+
+  register('njau_office_sheet_edit', {
+    description:
+      '按操作改一个 .xlsx（读→改→原子写）。ops 按顺序执行。可用操作：' +
+      'set_cell{ref 或 row+col, value, formula?, style?}；' +
+      'clear_cell{ref 或 row+col}；' +
+      'insert_row{index?}；delete_row{index}；' +
+      'set_row{index, values:[...]}；set_sheet_name{name}。' +
+      'ref 用 A1 记法（如 B3），row/col 都从 0 开始。',
+    parameters: objectSchema({
+      path: { type: 'string', description: '.xlsx 路径。' },
+      sheet: { type: 'string', description: '工作表名；留空改第一张。' },
+      ops: {
+        type: 'array',
+        description: '操作数组，见工具说明。',
+        items: {
+          type: 'object',
+          properties: {
+            op: { type: 'string', description: '操作名' },
+            ref: { type: 'string', description: 'A1 记法的单元格，如 B3' },
+            row: { type: 'number', description: '行号（从 0 开始）' },
+            col: { type: 'number', description: '列号（从 0 开始）' },
+            index: { type: 'number', description: '行下标' },
+            value: { type: 'string', description: '单元格的值' },
+            formula: { type: 'string', description: '公式（不带等号也可以）' },
+            style: { type: 'string', description: '样式下标（0 = 默认，1 = 加粗）' },
+            name: { type: 'string', description: 'set_sheet_name 的新名字' },
+            values: { type: 'array', items: { type: 'string' }, description: 'set_row 的一整行值' },
+          },
+          required: ['op'],
+        },
+      },
+    }, ['path', 'ops']),
+    behavior: 'write',
+    execute(args) {
+      return pass(service.editSheet(args?.path, args?.ops, args?.sheet))
+    },
+  })
+
+  register('njau_office_sheet_create', {
+    description: '新建一个空的 .xlsx（单工作表，可选表名）。文件已存在会拒绝，不会覆盖。',
+    parameters: objectSchema({
+      path: { type: 'string', description: '要创建的 .xlsx 路径。' },
+      sheet_name: { type: 'string', description: '可选：工作表名（默认 Sheet1）。' },
+    }, ['path']),
+    behavior: 'write',
+    execute(args) {
+      return pass(service.createSheet(args?.path, args?.sheet_name))
+    },
+  })
+
   register('njau_office_status', {
     description:
       '报告文档编辑器是否可用：文档根目录、接口地址、以及当前环境里能不能用面板。' +
@@ -208,8 +299,11 @@ export function registerTools(ctx, service) {
         service: 'njau-office',
         root: service.root,
         api: '/njau/api/office',
-        tools: ['njau_office_list', 'njau_office_read', 'njau_office_edit', 'njau_office_create'],
-        hint: '面板在会话右侧栏的「办公」标签页；打不开时先看 host 日志里有没有 [njau-office] 前缀的报错。',
+        tools: [
+          'njau_office_list', 'njau_office_read', 'njau_office_edit', 'njau_office_create',
+          'njau_office_sheet_read', 'njau_office_sheet_edit', 'njau_office_sheet_create',
+        ],
+        hint: '面板在会话右侧栏的「办公」标签页：.docx 打开文档编辑器，.xlsx 打开表格编辑器。',
       }
     },
   })
