@@ -1,5 +1,10 @@
 # 南农计协 · DSH
 
+[![license: MIT](https://img.shields.io/badge/license-MIT-0B5FFF)](LICENSE)
+[![node](https://img.shields.io/badge/node-22%20%7C%2024-3C873A)](.github/workflows/ci.yml)
+[![runtime deps: 0](https://img.shields.io/badge/runtime%20deps-0-brightgreen)](docs/adr/0005-zero-runtime-dependencies.md)
+[![for DSH](https://img.shields.io/badge/runs%20on-DeepSeek%20Harness-4D6BFE)](https://github.com/deepseek-ai)
+
 > 南京农业大学计算机爱好者协会的**协会操作系统**。
 > 不是官网，是一整套接手协会大小事务的工具，跑在 DeepSeek Harness 上。
 
@@ -14,6 +19,31 @@ DSH 的立场是「一切皆插件」。我们顺着这个立场，把协会的�
 每一块都是独立插件，装上去就能用，不想要就摘掉，互不牵连。
 
 **它取代官网的位置。** 官网只能"看"，这套东西能"干活"。
+
+### 现在长成了一间「工作坊」
+
+三条产线收在同一个界面里，共用协会身份与数据目录：
+
+| 产线 | 干什么 | 状态 |
+| --- | --- | --- |
+| **办公** | 表格、纪要、立项书、报销单、年审材料 —— **自带 OOXML 引擎，不装 WPS/Office 也能直接改 .docx** | ✅ 可用 |
+| **漫剧** | 剧本 → 分镜 → 出图 → 配音字幕 → 合成 | 骨架已通，产线待建 |
+| **开发** | 协会网站、工具、脚本 | 只有导航，产线待建 |
+
+## 别的社团能用吗
+
+能。这套东西里**没有一个字节依赖南农计协**：协会名、学年、业务域都从
+数据目录里的 `identity.json` 和 `packages/workshop/lib/lines.js` 的产线表读出来。
+
+复刻一份自己的：
+
+1. fork 本仓库；
+2. 改 `identity.json`（协会名、简称、motto、学年）—— 这个文件在数据目录，不在仓库里；
+3. 改 `lib/lines.js` 的 `LINES`（你们的产线与业务域目录）；
+4. 跑 `scripts/install.ps1`，装进你们自己的 profile。
+
+三条架构铁律（插件互不调用 / 零运行时依赖 / 数据纯文本）是这套东西最值得抄的部分，
+见 [`docs/architecture.md`](docs/architecture.md) 与 [`docs/adr/`](docs/adr/)。
 
 ## 为什么不做网站
 
@@ -90,19 +120,40 @@ dsh njau --port 0 --no-open
 ## 目录
 
 ```
-packages/     各域插件（core、brand、……），一个域一个包
-docs/         愿景、架构、安装、ADR、年度归档
+packages/     各插件，一个域一个包
+  core/         协会底座：数据目录、工具、技能、斜杠命令、人设段
+  brand/        品牌：侧栏标识、窗口标题、主题色
+  deck/         PPT 大纲与模板
+  workshop/     ★ 工作坊外壳：三条产线的统一入口与现状总览
+  office/       ★ 办公柱：自带 OOXML 引擎，直接读写 .docx
+docs/         愿景、架构、安装、工作坊、ADR、年度归档
+  workshop.md   工作坊的分层、边界与三柱路线
   adr/          架构决策记录（为什么是现在这样）
   archive/      每学年一份只读快照
-scripts/      安装 / 卸载 / 体检（.ps1 本体 + .cmd 双击包装）
+scripts/      安装 / 卸载 / 体检 / 自检（.ps1 本体 + .cmd 双击包装）
 tests/        冒烟测试，改完代码跑一遍
 ```
 
 仓库**只有代码和文档**。协会的业务数据在
 `%USERPROFILE%\.dsh\njau-ca\`，不进 git。
 
+## 本地自检（不需要装 DSH）
+
+```bash
+node scripts/check.mjs          # 包结构与语法
+node tests/smoke-core.mjs       # 底座：工具 / 命令 / 技能契约
+node tests/smoke-deck.mjs       # PPT：模板解析 / 大纲写入 / 路径穿越防护
+node tests/smoke-workshop.mjs   # 工作坊 + 办公柱：真 HTTP + 真 .docx 往返
+```
+
+这些测试**不依赖 DSH、不依赖 pnpm、不联网**：假 ctx 把插件真跑起来，
+再把注册到的 HTTP 路由挂到真 http 服务上，用 fetch 走一遍面板会走的请求。
+文档引擎还会真的落一份 .docx 到临时目录、读回来逐字比对。
+
 ## 许可
 
 MIT。见 [`LICENSE`](LICENSE)。
 
 代码开放，**数据不开放** —— 数据归协会所有，单独交接。
+
+欢迎 fork、抄架构、抄那三条铁律。如果这套东西对你们社团有用，开个 issue 说一声就行。
