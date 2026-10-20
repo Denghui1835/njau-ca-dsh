@@ -52,6 +52,7 @@ function readBody(req) {
 function statusOf(code) {
   if (code === 'doc/conflict') return 409
   if (code === 'sheet/conflict') return 409
+  if (code === 'deck/conflict') return 409
   if (code === 'sheet/not-found') return 404
   if (code === 'file/missing' || code === 'dir/missing') return 404
   if (code === 'file/exists') return 409
@@ -89,6 +90,22 @@ export function registerHttp(ctx, service, options = {}) {
         const path = url.searchParams.get('path')
         if (path === null) return send(res, 400, { ok: false, error: { code: 'path/invalid', message: '缺少 path' } })
         const result = service.stat(path)
+        return send(res, result.ok ? 200 : statusOf(result.error.code), result)
+      }
+      if (req.method === 'GET' && route === '/deck') {
+        const path = url.searchParams.get('path')
+        if (path === null) return send(res, 400, { ok: false, error: { code: 'path/invalid', message: '缺少 path' } })
+        const result = service.readDeck(path)
+        return send(res, result.ok ? 200 : statusOf(result.error.code), result)
+      }
+      if (req.method === 'POST' && route === '/deck') {
+        const body = await readBody(req)
+        const result = service.saveDeck(body.path, body.model, body.baseHash)
+        return send(res, result.ok ? 200 : statusOf(result.error.code), result)
+      }
+      if (req.method === 'POST' && route === '/new-deck') {
+        const body = await readBody(req)
+        const result = service.createDeck(body.path, body.title)
         return send(res, result.ok ? 200 : statusOf(result.error.code), result)
       }
       if (req.method === 'GET' && route === '/sheet') {

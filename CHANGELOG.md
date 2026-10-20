@@ -321,6 +321,37 @@
 - 手改一格会覆盖该格原有公式（公式原文仍在 tooltip）；
 - 不能新增工作表（能改名）；加表要同步改 workbook.xml / rels / content types，漏一处就「文件损坏」。
 
+### 办公柱补齐 `.pptx`（幻灯片读写 + 文字编辑）
+
+办公柱按目标收口成 **docx / xlsx / pptx 三件套**。
+
+- **引擎**：`pptx-read.js` / `pptx-write.js`，与前两者共用 `zip.js` + `xml.js`。
+  读：presentation.xml → 各 slide → 形状树里的文字形状 → 段落（含 `a:pPr lvl` 缩进层级）；
+  写：每张幻灯片**整棵形状树重新序列化** —— 图片、表格、图表、SmartArt 都还在；
+  文字只重建模型里管的形状的 `a:p`，模板取自该形状原来的第一个 `a:p` / `a:r`，
+  所以字号、颜色、对齐不会因为改了一行字而丢。
+- **面板**：同一个「办公」面板按扩展名分流到三种编辑器 —— 纸页（docx）/ 网格（xlsx）/
+  幻灯片（页列表 + 标题 + 要点，带缩进层级、加减要点、上下页）。
+- **agent**：`njau_office_deck_read` / `deck_edit` / `deck_create`，操作
+  `set_title` / `set_text` / `add_paragraph` / `delete_paragraph` / `set_level`，
+  按「页下标 + 形状序号 + 段落下标」定位。办公柱工具数 8 → **11**。
+- 并发保护与其他一致：`baseHash` 不匹配即 409（`deck/conflict`）。
+
+#### 实测验证
+
+- **独立解析器交叉验证**：新建 → 改标题与要点 → 写回，用 **python-pptx** 打开两份产物，
+  都能正确读出页数与 `12192000×6858000 EMU` 画布，改后的文字也确实在里面。
+- `tests/smoke-pptx.mjs` 全绿：新建 → 读（页/形状/段落/部件路径）→ 5 个操作 → 落盘回读
+  → 删段落 → 409 冲突 → 页/形状下标越界 → 扩展名防呆 → scan 带 `kind`。
+- `scripts/verify-live.mjs` 加幻灯片端到端：建临时 .pptx → 读回 → 整稿保存 → 标题落盘 → 自动清理。
+
+#### 踩到并修掉的一个真 bug
+
+`<p:sldId id="256" r:id="rId2"/>` 里 **`id` 是页标识、`r:id` 才是关系引用**。
+第一版取了 `id`，结果新建的演示文稿「0 页」——但没有任何报错。
+`.xlsx` 的 `<sheet name=… sheetId=… r:id=…/>` 有同一个坑，一并改成优先取 `r:id`。
+教训写进了 `packages/office/OWNER.md`。
+
 ### 开源
 
 - 仓库以 **MIT** 公开：https://github.com/Denghui1835/njau-ca-dsh

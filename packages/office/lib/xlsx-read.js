@@ -91,7 +91,8 @@ function parseWorkbook(entries) {
       if (typeof child === 'string') continue
       if (child.local === 'sheet') {
         const name = attr(child, 'name') ?? `Sheet${sheets.length + 1}`
-        const relId = attr(child, 'id') ?? attr(child, 'r:id')
+        // r:id 才是关系引用；sheetId 是另一回事（曾经踩过取错属性的坑）。
+        const relId = attr(child, 'r:id') ?? attr(child, 'rId')
         const target = relId === undefined ? undefined : rels.get(relId)
         const part = target === undefined
           ? `xl/worksheets/sheet${sheets.length + 1}.xml`

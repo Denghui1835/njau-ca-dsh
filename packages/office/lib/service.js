@@ -14,18 +14,23 @@ import { createDocx, writeDocx } from './docx-write.js'
 import { readXlsx, sheetToText } from './xlsx-read.js'
 import { createXlsx, writeXlsx } from './xlsx-write.js'
 import { applySheetOp, findSheet } from './sheet-ops.js'
+import { readPptx, deckToText, slideTitle } from './pptx-read.js'
+import { createPptx, writePptx } from './pptx-write.js'
+import { applyDeckOp } from './deck-ops.js'
 
 const OK = (value) => ({ ok: true, value })
 const FAIL = (code, message) => ({ ok: false, error: { code, message } })
 
-/** 办公柱管的两类文件：Word 文档与 Excel 表格。 */
+/** 办公柱管的三类文件：Word / Excel / PowerPoint。 */
 const DOC_EXT = new Set(['.docx', '.doc'])
 const SHEET_EXT = new Set(['.xlsx', '.xlsm'])
-const OFFICE_EXT = new Set([...DOC_EXT, ...SHEET_EXT])
+const DECK_EXT = new Set(['.pptx', '.pptm'])
+const OFFICE_EXT = new Set([...DOC_EXT, ...SHEET_EXT, ...DECK_EXT])
 
 const kindOf = (name) => {
   const ext = extname(name).toLowerCase()
   if (SHEET_EXT.has(ext)) return 'xlsx'
+  if (DECK_EXT.has(ext)) return 'pptx'
   if (DOC_EXT.has(ext)) return 'docx'
   return 'other'
 }
@@ -61,6 +66,12 @@ function assertSheetPath(path) {
   if (typeof path !== 'string' || path.trim() === '') throw new Error('path 不能为空')
   const ext = extname(path).toLowerCase()
   if (!SHEET_EXT.has(ext)) throw new Error(`只支持 .xlsx（收到 ${ext || '无扩展名'}）`)
+}
+
+function assertDeckPath(path) {
+  if (typeof path !== 'string' || path.trim() === '') throw new Error('path 不能为空')
+  const ext = extname(path).toLowerCase()
+  if (!DECK_EXT.has(ext)) throw new Error(`只支持 .pptx（收到 ${ext || '无扩展名'}）`)
 }
 
 export function createDocService(ctx, config = {}) {
@@ -147,6 +158,121 @@ export function createDocService(ctx, config = {}) {
         return { domain, count: files.length, files }
       }).sort((a, b) => b.files[0].mtime.localeCompare(a.files[0].mtime))
       return OK({ root, domains, total: domains.reduce((sum, d) => sum + d.count, 0) })
+    },
+
+    // ---------------------------------------------------------------- 演示文稿
+
+    /** 读演示文稿：每页的文字形状与段落。 */
+    readDeck(path) {
+      try {
+        assertDeckPath(path)
+      } catch (error) {
+        return FAIL('path/invalid', error.message)
+      }
+      const abs = resolvePath(path)
+      if (!existsSync(abs)) return FAIL('file/missing', `文件不存在：${abs}`)
+      try {
+        const buffer = readFileSync(abs)
+        const { slides, size, parts } = readPptx(buffer)
+        return OK({
+          path: abs,
+          name: abs.split(/[\\/]/).pop(),
+          kind: 'pptx',
+          hash: hashOf(buffer),
+          bytes: buffer.length,
+          size,
+          slides: slides.map((slide) => ({ ...slide, title: slideTitle(slide) })),
+          parts,
+        })
+      } catch (error) {
+        return FAIL('pptx/parse-failed', `解析失败：${error.message}`)
+      }
+    },
+
+    /** 存演示文稿模型。不能增删页（这一版），页数与原文件必须一致。 */
+    saveDeck(path, model, baseHash) {
+      try {
+        assertDeckPath(path)
+      } catch (error) {
+        return FAIL('path/invalid', error.message)
+      }
+      const abs = resolvePath(path)
+      if (model === null || typeof model !== 'object' || !Array.isArray(model.slides) || model.slides.length === 0) {
+        return FAIL('model/invalid', 'model.slides 必须是非空数组')
+      }
+      let original
+      if (existsSync(abs)) {
+        original = readFileSync(abs)
+        const current = hashOf(original)
+        if (typeof baseHash === 'string' && baseHash !== '' && baseHash !== current) {
+          return FAIL('deck/conflict', `文件已被改动（现有 ${current}，你打开的是 ${baseHash}）。先刷新再保存。`)
+        }
+      } else {
+        return FAIL('file/missing', `文件不存在：${abs}（新增页要整包重建，这一版请先 create）`)
+      }
+      try {
+        const buffer = writePptx(model, original)
+        writeAtomic(abs, buffer)
+        return OK({ path: abs, hash: hashOf(buffer), bytes: buffer.length, slideCount: model.slides.length })
+      } catch (error) {
+        return FAIL('pptx/write-failed', `写入失败：${error.message}`)
+      }
+    },
+
+    /** 新建演示文稿（一页：标题 + 要点）。 */
+    createDeck(path, title) {
+      try {
+        assertDeckPath(path)
+      } catch (error) {
+        return FAIL('path/invalid', error.message)
+      }
+      const abs = resolvePath(path)
+      if (existsSync(abs)) return FAIL('file/exists', `文件已存在：${abs}`)
+      try {
+        const heading = typeof title === 'string' && title.trim() !== '' ? title.trim() : '演示文稿'
+        const buffer = createPptx({ title: heading })
+        writeAtomic(abs, buffer)
+        return OK({ path: abs, hash: hashOf(buffer), bytes: buffer.length, title: heading })
+      } catch (error) {
+        return FAIL('pptx/create-failed', `创建失败：${error.message}`)
+      }
+    },
+
+    /** 按操作改演示文稿（给 agent 用）：读 → 逐条 apply → 写。 */
+    editDeck(path, ops) {
+      if (!Array.isArray(ops) || ops.length === 0) return FAIL('ops/invalid', 'ops 必须是非空数组')
+      const read = this.readDeck(path)
+      if (!read.ok) return read
+      const deck = { slides: read.value.slides }
+      const applied = []
+      for (const [index, op] of ops.entries()) {
+        try {
+          applied.push({ op: op?.op ?? '?', result: applyDeckOp(deck, op) })
+        } catch (error) {
+          return FAIL('ops/failed', `第 ${index + 1} 个操作失败（${op?.op ?? '?'}）：${error.message}`)
+        }
+      }
+      const saved = this.saveDeck(path, { slides: deck.slides.map((slide) => ({ part: slide.part, shapes: slide.shapes })) }, read.value.hash)
+      if (!saved.ok) return saved
+      const refreshed = this.readDeck(path)
+      return OK({
+        path: saved.value.path,
+        hash: saved.value.hash,
+        slides: refreshed.ok ? refreshed.value.slides : deck.slides,
+        applied,
+        outline: refreshed.ok ? deckToText({ slides: refreshed.value.slides }) : '',
+      })
+    },
+
+    /** 演示文稿大纲（纯文本，给 agent 读）。 */
+    deckText(path) {
+      const read = this.readDeck(path)
+      if (!read.ok) return read
+      return OK({
+        path: read.value.path,
+        slides: read.value.slides.length,
+        text: deckToText({ slides: read.value.slides }),
+      })
     },
 
     // ---------------------------------------------------------------- 表格

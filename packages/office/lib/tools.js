@@ -5,6 +5,8 @@
  * schema 必须是规范 JSON Schema：必填写在对象级 required 数组里（属性级 required:true 不合法）。
  */
 
+import { deckToText } from './pptx-read.js'
+
 const TEXT_RESULT = {
   schema: {},
   render(_args, value) {
@@ -288,6 +290,88 @@ export function registerTools(ctx, service) {
     },
   })
 
+  // ---------------------------------------------------------------- 演示文稿
+
+  register('njau_office_deck_read', {
+    description:
+      '读一个 .pptx：共几页、每页标题、每页文字形状与段落（含缩进层级），并给一份纯文本大纲。' +
+      '改之前先读，shape / slide 都是 0 开始的下标。',
+    parameters: objectSchema({
+      path: { type: 'string', description: '.pptx 路径。' },
+    }, ['path']),
+    behavior: 'read',
+    execute(args) {
+      const read = service.readDeck(args?.path)
+      if (!read.ok) return pass(read)
+      return {
+        path: read.value.path,
+        hash: read.value.hash,
+        slideCount: read.value.slides.length,
+        size: read.value.size,
+        slides: read.value.slides.map((slide) => ({
+          index: slide.index,
+          title: slide.title,
+          shapes: slide.shapes.map((shape) => ({
+            shape: shape.ref,
+            ...(shape.placeholder === undefined ? {} : { placeholder: shape.placeholder }),
+            paragraphs: shape.paragraphs.map((paragraph, index) => ({
+              index,
+              text: paragraph.text,
+              level: paragraph.level,
+            })),
+          })),
+        })),
+        outline: deckToText({ slides: read.value.slides }),
+      }
+    },
+  })
+
+  register('njau_office_deck_edit', {
+    description:
+      '按操作改一个 .pptx（读→改→原子写）。ops：' +
+      'set_title{slide, text}；' +
+      'set_text{slide, shape, index, text}；' +
+      'add_paragraph{slide, shape?, text, level?}（不传 shape 就写正文）；' +
+      'delete_paragraph{slide, shape, index}；' +
+      'set_level{slide, shape, index, level}。' +
+      'slide 是页下标（0 开始），shape 是该页文字形状序号（0 开始）。**不能增删页**。',
+    parameters: objectSchema({
+      path: { type: 'string', description: '.pptx 路径。' },
+      ops: {
+        type: 'array',
+        description: '操作数组',
+        items: {
+          type: 'object',
+          properties: {
+            op: { type: 'string', description: '操作名' },
+            slide: { type: 'number', description: '页下标（0 开始）' },
+            shape: { type: 'number', description: '该页文字形状序号（0 开始）' },
+            index: { type: 'number', description: '段落下标（0 开始）' },
+            text: { type: 'string', description: '文字' },
+            level: { type: 'number', description: '缩进层级 0..8' },
+          },
+          required: ['op'],
+        },
+      },
+    }, ['path', 'ops']),
+    behavior: 'write',
+    execute(args) {
+      return pass(service.editDeck(args?.path, args?.ops))
+    },
+  })
+
+  register('njau_office_deck_create', {
+    description: '新建一个 .pptx（一页：标题 + 一条要点）。已存在会拒绝。',
+    parameters: objectSchema({
+      path: { type: 'string', description: '要创建的 .pptx 路径。' },
+      title: { type: 'string', description: '可选：第一页标题。' },
+    }, ['path']),
+    behavior: 'write',
+    execute(args) {
+      return pass(service.createDeck(args?.path, args?.title))
+    },
+  })
+
   register('njau_office_status', {
     description:
       '报告文档编辑器是否可用：文档根目录、接口地址、以及当前环境里能不能用面板。' +
@@ -302,8 +386,9 @@ export function registerTools(ctx, service) {
         tools: [
           'njau_office_list', 'njau_office_read', 'njau_office_edit', 'njau_office_create',
           'njau_office_sheet_read', 'njau_office_sheet_edit', 'njau_office_sheet_create',
+          'njau_office_deck_read', 'njau_office_deck_edit', 'njau_office_deck_create',
         ],
-        hint: '面板在会话右侧栏的「办公」标签页：.docx 打开文档编辑器，.xlsx 打开表格编辑器。',
+        hint: '面板在会话右侧栏的「办公」标签页：.docx 打开文档编辑器，.xlsx 打开表格编辑器，.pptx 打开幻灯片编辑器。',
       }
     },
   })

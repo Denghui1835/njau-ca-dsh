@@ -193,6 +193,34 @@ try {
   check(false, `临时表格清理失败：${error.message}`)
 }
 
+console.log('\n--- 办公柱：幻灯片端到端（临时文件） ---')
+const deckName = `_verify-${Date.now().toString(36)}.pptx`
+const deckPath = `events/${deckName}`
+const deckCreated = await api('POST', '/njau/api/office/new-deck', { path: deckPath, title: '验证文稿' })
+check(deckCreated.status === 200, `新建临时演示文稿 ${deckPath}`)
+const deckRead = await api('GET', `/njau/api/office/deck?path=${encodeURIComponent(deckPath)}`)
+check(deckRead.status === 200 && deckRead.data.value.slides.length === 1, '读回 1 页')
+const deckModel = {
+  slides: deckRead.data.value.slides.map((slide) => ({ part: slide.part, shapes: slide.shapes })),
+}
+deckModel.slides[0].shapes[0].paragraphs[0].text = '验证文稿（改过）'
+const deckSaved = await api('POST', '/njau/api/office/deck', {
+  path: deckPath,
+  model: deckModel,
+  baseHash: deckRead.data.value.hash,
+})
+check(deckSaved.status === 200, '整稿保存 200')
+const deckBack = await api('GET', `/njau/api/office/deck?path=${encodeURIComponent(deckPath)}`)
+check(deckBack.data.value.slides[0].title === '验证文稿（改过）', '标题落盘并读回')
+const deckFile = join(String(manjuBase), '..', '..', 'events', deckName)
+check(existsSync(deckFile), '演示文稿文件真的在磁盘上')
+try {
+  rmSync(deckFile, { force: true })
+  check(!existsSync(deckFile), '临时演示文稿已清理')
+} catch (error) {
+  check(false, `临时演示文稿清理失败：${error.message}`)
+}
+
 console.log('\n--- 办公柱能列目录吗 ---')
 const scan = await api('GET', '/njau/api/office/scan')
 check(scan.status === 200, '办公 scan 200')

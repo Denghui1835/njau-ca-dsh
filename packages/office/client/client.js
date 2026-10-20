@@ -242,6 +242,15 @@ window.__ModuleLoader__.load({
 .ws-cell{width:100%;box-sizing:border-box;border:0;outline:none;background:transparent;color:inherit;font:inherit;font-size:11.5px;padding:3px 5px;min-width:78px}
 .ws-cell:focus{background:#eef5ff;box-shadow:inset 0 0 0 2px #0b5fff}
 .ws-sheet-foot{flex:0 0 auto;padding:4px 8px;border-top:1px solid var(--dsw-alias-border-l2);font-size:11px;color:var(--dsw-alias-label-tertiary);background:var(--dsw-alias-bg-layer-1)}
+.ws-deck-body{flex:1 1 auto;min-height:0;display:flex;gap:8px;padding:8px}
+.ws-deck-list{flex:0 0 132px;min-width:0;overflow:auto;display:flex;flex-direction:column;gap:4px}
+.ws-deck-thumb{display:flex;align-items:center;gap:6px;padding:6px 7px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-layer-2);color:inherit;font:inherit;font-size:11.5px;text-align:left;cursor:pointer}
+.ws-deck-thumb[data-active="true"]{border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-interactive-bg-active)}
+.ws-deck-no{flex:0 0 auto;width:18px;height:18px;border-radius:4px;background:var(--dsw-alias-bg-layer-3);display:grid;place-items:center;font-size:10px;color:var(--dsw-alias-label-secondary)}
+.ws-deck-title{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-deck-editor{flex:1 1 auto;min-width:0;overflow:auto;display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1)}
+.ws-deck-row{display:flex;align-items:center;gap:6px}
+.ws-deck-section{font-size:11px;color:var(--dsw-alias-label-tertiary);margin-top:4px}
 `
 
     function ensureStyle() {
@@ -270,6 +279,8 @@ window.__ModuleLoader__.load({
       const shared = usePanelState()
       const [doc, setDoc] = useState(null)
       const [sheet, setSheet] = useState(null)
+      const [deck, setDeck] = useState(null)
+      const [activeSlide, setActiveSlide] = useState(0)
       const [files, setFiles] = useState([])
       const [error, setError] = useState('')
       const [notice, setNotice] = useState('')
@@ -284,12 +295,14 @@ window.__ModuleLoader__.load({
 
       const docRef = useRef(null)
       const sheetRef = useRef(null)
+      const deckRef = useRef(null)
       const pageRef = useRef(null)
       const activeIndex = useRef(-1)
       const pendingCaret = useRef(null)
 
       docRef.current = doc
       sheetRef.current = sheet
+      deckRef.current = deck
 
       const flash = useCallback((message) => {
         setNotice(message)
@@ -304,12 +317,24 @@ window.__ModuleLoader__.load({
         setBusy(true)
         setError('')
         const isSheet = /\.(xlsx|xlsm)$/i.test(path)
+        const isDeck = /\.(pptx|pptm)$/i.test(path)
         try {
-          if (isSheet) {
+          if (isDeck) {
+            const value = await call(`/deck?path=${encodeURIComponent(path)}`)
+            setDeck(value)
+            deckRef.current = value
+            setDoc(null)
+            setSheet(null)
+            docRef.current = null
+            sheetRef.current = null
+            setActiveSlide(0)
+          } else if (isSheet) {
             const value = await call(`/sheet?path=${encodeURIComponent(path)}`)
             setSheet(value)
             sheetRef.current = value
             setDoc(null)
+            setDeck(null)
+            deckRef.current = null
             docRef.current = null
             setActiveSheet(0)
           } else {
@@ -317,7 +342,9 @@ window.__ModuleLoader__.load({
             setDoc(value)
             docRef.current = value
             setSheet(null)
+            setDeck(null)
             sheetRef.current = null
+            deckRef.current = null
             setRev((r) => r + 1)
           }
           setDirty(false)
@@ -370,6 +397,103 @@ window.__ModuleLoader__.load({
           setBusy(false)
         }
       }, [])
+
+      const createDeck = useCallback(async () => {
+        const name = newName.trim()
+        if (name === '') {
+          setError('先写个文件名，例如 招新宣讲.pptx')
+          return
+        }
+        const fileName = /\.pptx$/i.test(name) ? name : `${name}.pptx`
+        setBusy(true)
+        setError('')
+        try {
+          const value = await post('/new-deck', { path: fileName, title: '' })
+          setNewName('')
+          await load(value.path)
+        } catch (failure) {
+          setError(failure.message)
+          setBusy(false)
+        }
+      }, [newName, load])
+
+      // ---- 幻灯片编辑
+
+      const saveDeck = useCallback(async () => {
+        const current = deckRef.current
+        if (current === null) return
+        setBusy(true)
+        setError('')
+        try {
+          const result = await post('/deck', {
+            path: current.path,
+            model: { slides: current.slides.map((slide) => ({ part: slide.part, shapes: slide.shapes })) },
+            baseHash: current.hash,
+          })
+          const next = { ...current, hash: result.hash, bytes: result.bytes }
+          setDeck(next)
+          deckRef.current = next
+          setDirty(false)
+          flash('演示文稿已保存')
+        } catch (failure) {
+          setError(failure.message)
+        } finally {
+          setBusy(false)
+        }
+      }, [flash])
+
+      const editParagraph = useCallback((slideIndex, shapeIndex, paragraphIndex, patch) => {
+        setDeck((previous) => {
+          if (previous === null) return previous
+          const slides = previous.slides.map((slide, index) => {
+            if (index !== slideIndex) return slide
+            const shapes = slide.shapes.map((shape, sIndex) => {
+              if (sIndex !== shapeIndex) return shape
+              const paragraphs = shape.paragraphs.map((paragraph, pIndex) => (
+                pIndex === paragraphIndex ? { ...paragraph, ...patch } : paragraph
+              ))
+              return { ...shape, paragraphs }
+            })
+            return { ...slide, shapes }
+          })
+          return { ...previous, slides }
+        })
+        markDirty()
+      }, [markDirty])
+
+      const addParagraph = useCallback((slideIndex, shapeIndex) => {
+        setDeck((previous) => {
+          if (previous === null) return previous
+          const slides = previous.slides.map((slide, index) => {
+            if (index !== slideIndex) return slide
+            const shapes = slide.shapes.map((shape, sIndex) => (
+              sIndex === shapeIndex
+                ? { ...shape, paragraphs: [...shape.paragraphs, { text: '', level: 0 }] }
+                : shape
+            ))
+            return { ...slide, shapes }
+          })
+          return { ...previous, slides }
+        })
+        markDirty()
+      }, [markDirty])
+
+      const deleteParagraph = useCallback((slideIndex, shapeIndex, paragraphIndex) => {
+        setDeck((previous) => {
+          if (previous === null) return previous
+          const slides = previous.slides.map((slide, index) => {
+            if (index !== slideIndex) return slide
+            const shapes = slide.shapes.map((shape, sIndex) => {
+              if (sIndex !== shapeIndex) return shape
+              if (shape.paragraphs.length <= 1) return shape
+              return { ...shape, paragraphs: shape.paragraphs.filter((_, pIndex) => pIndex !== paragraphIndex) }
+            })
+            return { ...slide, shapes }
+          })
+          return { ...previous, slides }
+        })
+        markDirty()
+      }, [markDirty])
 
       const createSheet = useCallback(async () => {
         const name = newName.trim()
@@ -510,8 +634,10 @@ window.__ModuleLoader__.load({
         if (target === null) return
         const currentDoc = docRef.current
         const currentSheet = sheetRef.current
+        const currentDeck = deckRef.current
         if (currentDoc !== null && currentDoc.path === target) return
         if (currentSheet !== null && currentSheet.path === target) return
+        if (currentDeck !== null && currentDeck.path === target) return
         void load(target, { silent: true })
       }, [shared.path, load])
 
@@ -521,7 +647,8 @@ window.__ModuleLoader__.load({
         const timer = window.setInterval(async () => {
           const currentDoc = docRef.current
           const currentSheet = sheetRef.current
-          const current = currentDoc ?? currentSheet
+          const currentDeck = deckRef.current
+          const current = currentDoc ?? currentSheet ?? currentDeck
           if (current === null || dirty || document.visibilityState !== 'visible') return
           try {
             const value = await call(`/stat?path=${encodeURIComponent(current.path)}`)
@@ -725,7 +852,7 @@ window.__ModuleLoader__.load({
 
       // 文档与表格共用的「重新读一遍」
       const refreshAny = useCallback(() => {
-        const target = sheetRef.current?.path ?? docRef.current?.path
+        const target = sheetRef.current?.path ?? deckRef.current?.path ?? docRef.current?.path
         if (target === undefined) return
         if (dirty && !window.confirm('有未保存的修改，刷新会丢掉它们。继续？')) return
         void load(target, { silent: true })
@@ -742,14 +869,14 @@ window.__ModuleLoader__.load({
         h('button', {
           type: 'button',
           className: 'ws-btn',
-          disabled: busy || (doc === null && sheet === null),
-          onClick: () => (sheetRef.current !== null ? void saveSheet() : save()),
+          disabled: busy || (doc === null && sheet === null && deck === null),
+          onClick: () => (sheetRef.current !== null ? void saveSheet() : deckRef.current !== null ? void saveDeck() : save()),
           title: '写回文件（Ctrl+S）',
         }, '保存'),
         h('button', {
           type: 'button',
           className: 'ws-btn',
-          disabled: busy || (doc === null && sheet === null),
+          disabled: busy || (doc === null && sheet === null && deck === null),
           onClick: refreshAny,
           title: '重新从磁盘读一遍',
         }, '刷新'),
@@ -773,11 +900,105 @@ window.__ModuleLoader__.load({
         h('button', { type: 'button', className: 'ws-btn', disabled: doc === null, onClick: appendTable, title: '在文末插入表格' }, '表格'),
         h('div', { className: 'ws-status' },
           h('span', { className: 'ws-dot', 'data-dirty': dirty ? 'true' : 'false' }),
-          h('span', { className: 'ws-name', title: doc?.path ?? sheet?.path ?? '' },
-            doc !== null ? doc.name : sheet !== null ? sheet.name : '未打开文件'),
+          h('span', { className: 'ws-name', title: doc?.path ?? sheet?.path ?? deck?.path ?? '' },
+            doc !== null ? doc.name : sheet !== null ? sheet.name : deck !== null ? deck.name : '未打开文件'),
           h('span', null, status),
         ),
       )
+
+      // ---- 幻灯片模式：页列表 + 文字编辑（这一版只改字，不增删页）
+      if (deck !== null) {
+        const slides = deck.slides ?? []
+        const slide = slides[activeSlide] ?? slides[0]
+        const shapes = slide.shapes ?? []
+        const titleShapeIndex = Math.max(0, shapes.findIndex((shape) => shape.placeholder === 'title' || shape.placeholder === 'ctrTitle'))
+        const titleShape = shapes[titleShapeIndex]
+        const bodyShapeIndex = shapes.findIndex((shape, index) => index !== titleShapeIndex)
+        const bodyShape = bodyShapeIndex >= 0 ? shapes[bodyShapeIndex] : undefined
+
+        const titleText = titleShape?.paragraphs?.[0]?.text ?? ''
+        const bodyParagraphs = bodyShape?.paragraphs ?? []
+
+        return h('div', { className: 'ws-root' },
+          h('div', { className: 'ws-toolbar' },
+            h('button', { type: 'button', className: 'ws-btn', disabled: busy, onClick: listFiles, title: '换一个文件' }, '打开'),
+            h('button', { type: 'button', className: 'ws-btn ws-btn-primary', disabled: busy, onClick: () => void saveDeck() }, '保存'),
+            h('button', { type: 'button', className: 'ws-btn', disabled: busy, onClick: refreshAny }, '刷新'),
+            h('div', { className: 'ws-sep' }),
+            h('button', {
+              type: 'button', className: 'ws-btn', disabled: activeSlide === 0,
+              onClick: () => setActiveSlide((n) => Math.max(0, n - 1)),
+            }, '上一页'),
+            h('span', { className: 'ws-hint' }, `第 ${activeSlide + 1} / ${slides.length} 页`),
+            h('button', {
+              type: 'button', className: 'ws-btn', disabled: activeSlide >= slides.length - 1,
+              onClick: () => setActiveSlide((n) => Math.min(slides.length - 1, n + 1)),
+            }, '下一页'),
+            h('div', { className: 'ws-status' },
+              h('span', { className: 'ws-dot', 'data-dirty': dirty ? 'true' : 'false' }),
+              h('span', { className: 'ws-name', title: deck.path }, deck.name),
+              h('span', null, status),
+            ),
+          ),
+          error !== '' ? h('div', { className: 'ws-error' }, error) : null,
+          h('div', { className: 'ws-deck-body' },
+            h('div', { className: 'ws-deck-list' },
+              slides.map((item, index) => h('button', {
+                key: index,
+                type: 'button',
+                className: 'ws-deck-thumb',
+                'data-active': index === activeSlide ? 'true' : 'false',
+                onClick: () => setActiveSlide(index),
+              },
+              h('span', { className: 'ws-deck-no' }, String(index + 1)),
+              h('span', { className: 'ws-deck-title' }, item.title === '' ? '（无标题）' : item.title))),
+            ),
+            h('div', { className: 'ws-deck-editor' },
+              h('div', { className: 'ws-deck-row' },
+                h('span', { className: 'ws-hint', style: { flex: '0 0 auto' } }, '标题'),
+                h('input', {
+                  className: 'ws-input',
+                  value: titleText,
+                  placeholder: '这一页的标题',
+                  onChange: (event) => editParagraph(activeSlide, titleShapeIndex, 0, { text: event.currentTarget.value }),
+                }),
+              ),
+              h('div', { className: 'ws-deck-section' }, '正文'),
+              bodyShape === undefined
+                ? h('div', { className: 'ws-hint' }, '这一页没有正文占位符，只能改标题。')
+                : h('div', null,
+                  bodyParagraphs.map((paragraph, pIndex) => h('div', { key: pIndex, className: 'ws-deck-row' },
+                    h('select', {
+                      className: 'ws-select',
+                      style: { flex: '0 0 62px' },
+                      value: String(paragraph.level ?? 0),
+                      onChange: (event) => editParagraph(activeSlide, bodyShapeIndex, pIndex, { level: Number(event.currentTarget.value) }),
+                      title: '缩进层级',
+                    }, [0, 1, 2, 3, 4].map((level) => h('option', { key: level, value: String(level) }, level === 0 ? '•' : '—'.repeat(level)))),
+                    h('input', {
+                      className: 'ws-input',
+                      value: paragraph.text,
+                      placeholder: '一条要点',
+                      onChange: (event) => editParagraph(activeSlide, bodyShapeIndex, pIndex, { text: event.currentTarget.value }),
+                    }),
+                    h('button', {
+                      type: 'button',
+                      className: 'ws-btn',
+                      style: { flex: '0 0 auto' },
+                      disabled: bodyParagraphs.length <= 1,
+                      title: '删掉这段',
+                      onClick: () => deleteParagraph(activeSlide, bodyShapeIndex, pIndex),
+                    }, '×'),
+                  )),
+                  h('div', { style: { marginTop: 6 } },
+                    h('button', { type: 'button', className: 'ws-btn', onClick: () => addParagraph(activeSlide, bodyShapeIndex) }, '+ 加一条要点')),
+                ),
+            ),
+          ),
+          h('div', { className: 'ws-sheet-foot' },
+            `共 ${slides.length} 页 · 这一版只改文字（标题与要点），不增删页；图片与图表原样保留`),
+        )
+      }
 
       // ---- 表格模式：网格编辑器（docx 的纸页渲染在这里让位）
       if (sheet !== null) {
@@ -864,6 +1085,13 @@ window.__ModuleLoader__.load({
                 onClick: () => void createSheet(),
                 title: '同名会自动补 .xlsx',
               }, '新建表格'),
+              h('button', {
+                type: 'button',
+                className: 'ws-btn',
+                disabled: busy,
+                onClick: () => void createDeck(),
+                title: '同名会自动补 .pptx',
+              }, '新建演示文稿'),
             ),
             h('button', { type: 'button', className: 'ws-btn', disabled: busy, onClick: listFiles }, '浏览已有文件'),
             files.length > 0
