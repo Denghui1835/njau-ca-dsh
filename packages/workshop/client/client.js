@@ -180,6 +180,24 @@ window.__ModuleLoader__.load({
         }
       }, [props])
 
+      // 漫剧柱提供 window 钩子就能带着项目进去；没有钩子就只开面板。
+      const openManju = useCallback((name) => {
+        const hook = typeof window === 'undefined' ? undefined : window.__NJAU_OPEN_MANJU__
+        if (typeof hook === 'function') {
+          try {
+            hook(name ?? '')
+            return
+          } catch {
+            /* 落到下面兜底 */
+          }
+        }
+        try {
+          props.openTab('njau-manju')
+        } catch {
+          setError('漫剧面板还没装（@njau-ca/dsh-njau-manju），先把它加进 profile。')
+        }
+      }, [props])
+
       const identity = data?.identity ?? {}
       const lines = data?.lines ?? []
 
@@ -253,6 +271,7 @@ window.__ModuleLoader__.load({
             onKeyDown: (event) => { if (event.key === 'Enter') void createManju() },
           }),
           h('button', { type: 'button', className: 'nw-btn nw-btn-primary', disabled: busy, onClick: () => void createManju() }, '新建'),
+          h('button', { type: 'button', className: 'nw-btn', onClick: () => openManju('') }, '打开漫剧面板'),
         ),
         (data?.manju?.projects ?? []).length === 0
           ? h('div', { className: 'nw-empty' },
@@ -272,6 +291,9 @@ window.__ModuleLoader__.load({
               h('span', { className: 'nw-pill', 'data-ok': project.hasStoryboard ? 'true' : 'false' }, project.hasStoryboard ? '分镜 ✓' : '分镜 缺'),
               h('span', { className: 'nw-pill', 'data-ok': project.panels > 0 ? 'true' : 'false' }, `${project.panels} 格`),
               h('span', { className: 'nw-pill', 'data-ok': project.assets > 0 ? 'true' : 'false' }, `${project.assets} 素材`),
+            ),
+            h('div', { className: 'nw-actions' },
+              h('button', { type: 'button', className: 'nw-btn', onClick: () => openManju(project.name) }, '打开编辑'),
             ),
             h('div', { className: 'nw-path' }, project.rel),
           )),

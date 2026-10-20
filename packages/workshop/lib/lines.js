@@ -27,7 +27,7 @@ export const LINES = [
     glyph: '漫',
     desc: '剧本 → 分镜 → 出图 → 配音字幕 → 合成',
     domains: ['media'],
-    panel: null,
+    panel: 'njau-manju',
   },
   {
     id: 'code',

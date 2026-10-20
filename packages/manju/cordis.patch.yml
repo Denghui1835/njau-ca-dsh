@@ -1,0 +1,4 @@
+# 漫剧柱的 bundle patch。
+- insert:
+    - id: njau-manju
+      name: '@njau-ca/dsh-njau-manju'
